@@ -1,0 +1,20 @@
+{
+  "fidelity": {
+    "verdict": "close"
+  },
+  "quality_floor": {
+    "passed": true
+  },
+  "anchor": {
+    "what_is_right": [
+      "[L1] palette",
+      "[L2] spine treatment",
+      "[L1] tick density",
+      "[L1] line weight 1.8pt",
+      "[L1] marker size 6pt"
+    ]
+  },
+  "focus_themes": [
+    "legend frame: reference omits the frame; we still draw a box around the legend"
+  ]
+}

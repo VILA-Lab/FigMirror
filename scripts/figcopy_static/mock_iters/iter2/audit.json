@@ -1,0 +1,20 @@
+{
+  "fidelity": {
+    "verdict": "close"
+  },
+  "quality_floor": {
+    "passed": true
+  },
+  "anchor": {
+    "what_is_right": [
+      "[L1] palette",
+      "[L2] spines L+B hairline",
+      "[L1] tick density now 6 major",
+      "[L1] axis labels"
+    ]
+  },
+  "focus_themes": [
+    "marker size: still ~5pt, reference is closer to 6pt",
+    "line weight: 1.5pt; reference reads as 1.8pt"
+  ]
+}

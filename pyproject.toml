@@ -1,0 +1,26 @@
+[project]
+name = "figmirror"
+version = "0.1.0"
+requires-python = ">=3.10"
+# Runtime deps: needed by the per-iter Drawer / Reviewer subprocess
+# scripts that codex/claude invoke through `uv run --project`.
+# `uv run --project` does NOT install dev-group packages on a fresh
+# `.artifacts/uv-cache`, so anything an agent-generated script imports
+# must live here, not in `[dependency-groups].dev`. matplotlib + numpy
+# are imported by every Stage-1 Drawer script.
+dependencies = [
+    "pillow>=12.2.0",
+    "matplotlib>=3.10.9",
+    "numpy>=2.2.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests run against scripts/ directly (conftest.py adds it to sys.path);
+# matplotlib/numpy are runtime deps for the agent subprocess scripts,
+# not for pytest itself.

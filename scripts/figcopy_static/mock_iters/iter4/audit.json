@@ -1,0 +1,19 @@
+{
+  "fidelity": {
+    "verdict": "ship"
+  },
+  "quality_floor": {
+    "passed": true
+  },
+  "anchor": {
+    "what_is_right": [
+      "[L1] palette",
+      "[L2] spine treatment",
+      "[L1] tick density",
+      "[L1] marker size",
+      "[L1] line weight",
+      "[L2] legend frameless"
+    ]
+  },
+  "focus_themes": []
+}

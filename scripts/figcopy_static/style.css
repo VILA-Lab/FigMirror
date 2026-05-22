@@ -1,0 +1,2001 @@
+/* ============================================================
+   FigMirror webui — "plot surface"
+
+   Design direction: a light surface that hosts scientific figures
+   without fighting them. Figures are white-bg by default; a dark
+   chrome would make every figure pop as a harsh white box. Light
+   theme is mandatory for content harmony.
+
+   But "light" is not "no design". This stylesheet treats the page
+   as a layered surface — slightly-tinted body + pure-white cards
+   give depth without shadow gimmicks (the Vercel / Stripe move).
+   Type does the heavy lifting: Plus Jakarta Sans for display and
+   body, JetBrains Mono for data and labels. Single signature
+   accent: deep teal, used sparingly with high impact.
+
+   Sections:
+     [1] TOKENS    — palette, typography, spacing
+     [2] BASE      — body, dot-pattern background, globals
+     [3] HEADER    — page chrome shared by both pages
+     [4] TRAJECT.  — per-run page (cards, lightbox, helpbar, ...)
+     [5] LANDING   — workspace landing (panels, form, run list)
+     [6] MOTION    — page-load stagger + focus / hover transitions
+
+   Both pages link this single file; selectors are scoped by
+   element existence (e.g. .layout only exists on landing).
+   ============================================================ */
+
+
+/* Plus Jakarta Sans for display+body (geometric, distinctive,
+   reads modern without being Inter); JetBrains Mono for data.
+   Google Fonts CDN; system fallback if blocked. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+
+/* ─────────── [1] TOKENS ─────────── */
+
+:root{
+  /* Surfaces — layered light. Body is very slightly cool off-white;
+     cards lift to pure white. This single-step elevation is the
+     core depth move (no need for heavy shadows). */
+  --bg:#f6f7f8;
+  --bg-deep:#eceef1;     /* sunken zones (under-input fills, empty state) */
+  --surface:#ffffff;     /* cards, panels — figures sit naturally here */
+  --surface-2:#fafbfc;   /* hover surfaces */
+
+  /* Hairlines — cool slate, fine */
+  --line:#e4e6ea;
+  --line-2:#d4d8de;       /* stronger / focus rings */
+
+  /* Ink — near-black with slight cool tint, NOT pure #000 */
+  --ink:#0a0c10;
+  --ink-2:#1f2329;       /* secondary heading */
+  --muted:#5a5e6a;       /* body muted */
+  --muted-2:#7d818c;     /* hint / dim */
+
+  /* Accent — deep teal. Uncommon for SaaS chrome (most go indigo /
+     blue / purple). Reads as "scientific instrument" — pH meter,
+     oscilloscope readout — fitting for a research tool. Bumped one
+     shade darker (teal-600 → teal-700) so accent-on-white text and
+     white-on-accent button labels pass WCAG AA contrast (was
+     ~3.74:1, now ~5.47:1 — clears 4.5 normal-text floor). */
+  --accent:#0f766e;
+  --accent-2:#115e59;    /* hover (darker; teal-800) */
+  --accent-soft:#ccfbf1; /* tint for hover bg / selection */
+  --accent-line:rgba(15,118,110,.34);
+  --accent-glow:rgba(15,118,110,.16);
+
+  /* Semantic — chosen to still read on white surfaces */
+  --good:#15803d;        /* green-700 */
+  --good-bg:#dcfce7;     /* green-100 */
+  --good-line:#86efac;
+  --bad:#b91c1c;         /* red-700 */
+  --bad-bg:#fee2e2;
+  --bad-line:#fca5a5;
+  --neutral:#92400e;     /* amber-800 — for "close" / pending */
+  --neutral-bg:#fef3c7;
+  --neutral-line:#fcd34d;
+
+  /* Typography */
+  --sans:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,
+    'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+
+  /* Shadows — subtle, Vercel-style */
+  --shadow-sm:0 1px 2px rgba(15,23,42,.04),0 1px 1px rgba(15,23,42,.02);
+  --shadow-md:0 4px 12px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.10),0 2px 6px rgba(15,23,42,.04);
+}
+
+*{box-sizing:border-box}
+
+/* Honor the HTML `hidden` attribute even when components below set
+   their own `display:` value. Without this, e.g. `.dropzone-preview`
+   declares `display:flex`, which has the same specificity as the UA
+   stylesheet's `[hidden]{display:none}` and wins by source order —
+   the `hidden` attr becomes a no-op. `!important` is the conventional
+   fix here (Bootstrap / Tailwind reset / normalize.css all do it). */
+[hidden]{display:none !important}
+
+
+/* ─────────── [2] BASE ─────────── */
+
+body{
+  font-family:var(--sans);color:var(--ink);background:var(--bg);
+  margin:0;padding:0 0 5rem;
+  font-size:15px;line-height:1.55;font-weight:400;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+  /* Disable scroll-anchoring so the browser doesn't try to
+     compensate for the sticky header's compact-mode height change.
+     Without this: header shrinks → scroll-anchoring nudges scrollY
+     to keep visible content stable → the nudged scrollY can cross
+     the compact-header hysteresis threshold → re-toggle → oscillation
+     flicker. With this: scrollY stays put, the visible content shifts
+     up smoothly in sync with the header's max-height transition (a
+     one-shot, predictable animation; no oscillation). */
+  overflow-anchor:none;
+  /* Subtle dot pattern. 16px grid, 1px teal dots @ ~4% opacity.
+     Adds quiet texture without going noisy. Combined with a
+     barely-visible top-right teal radial wash for atmosphere. */
+  background-image:
+    radial-gradient(circle at 92% -10%,
+      rgba(13,148,136,.08) 0%,transparent 38%),
+    radial-gradient(circle 1px at 1px 1px,
+      rgba(13,148,136,.16) 1px,transparent 1.5px);
+  background-size:auto, 16px 16px;
+  background-attachment:fixed,fixed;
+  min-height:100vh;
+}
+
+.container{max-width:1180px;margin:0 auto;padding:0 1.75rem;
+  position:relative}
+.muted{color:var(--muted);font-weight:400}
+code,pre{font-family:var(--mono)}
+
+a{color:var(--accent);text-decoration:none;
+  transition:color .14s ease}
+a:hover{color:var(--accent-2)}
+::selection{background:var(--accent);color:#fff}
+
+
+/* ─────────── [3] HEADER ─────────── */
+
+header.top{
+  background:rgba(246,247,248,.85);
+  border-bottom:1px solid var(--line);
+  padding:1.55rem 0 1.4rem;
+  backdrop-filter:saturate(140%) blur(10px);
+  -webkit-backdrop-filter:saturate(140%) blur(10px);
+  position:sticky;top:0;z-index:50;
+  transition:padding .18s ease,background-color .18s ease}
+
+/* ─── Compact-on-scroll ─── trajectory.js toggles `is-compact` once
+   the user scrolls past ~80px. Idea: full header has identity
+   (brand + path + status) on first paint; once the user is reading
+   content, the header collapses to a single-line layout (breadcrumb
+   · run name · step tabs) so vertical viewport goes to the iter
+   strip / expanded view, not the chrome.
+
+   brand / run-path / status snap-hide; the rest transition padding +
+   font-size smoothly. The container flips from default block layout
+   to flex-row when compact. */
+/* Transition-suppression escape hatch. Applied to header.top during
+   initial paint so the server-default `is-compact` state + the JS
+   reconciliation with localStorage don't animate on every page load.
+   JS strips this class after two rAFs. */
+.no-transition, .no-transition *,
+.no-transition::before, .no-transition::after{
+  transition:none !important;
+  animation:none !important}
+
+header.top.is-compact{padding:.55rem 0}
+header.top.is-compact .container{
+  display:flex;align-items:center;gap:1rem}
+/* Brand / run-path / status collapse to zero size smoothly instead
+   of snapping to display:none. Transition pairs with the header's
+   padding transition + body's `overflow-anchor:none` so content
+   below slides up smoothly instead of jumping. NOT display:none —
+   that zeros box geometry instantly, the transition wouldn't run. */
+.brand, .run-path, .status{
+  transition:max-height .18s ease, opacity .14s ease,
+             margin .18s ease, padding .18s ease;
+  overflow:hidden}
+header.top.is-compact .brand,
+header.top.is-compact .run-path,
+header.top.is-compact .status{
+  max-height:0;opacity:0;
+  margin-top:0;margin-bottom:0;
+  padding-top:0;padding-bottom:0;
+  pointer-events:none}
+
+/* ─── Header chrome: Workspace breadcrumb + fold/expand button ───
+   Grouped on the LEFT as a single flex cluster. Lives inline in the
+   container so it never overlaps the step-tabs on the right. */
+.header-chrome{
+  display:flex;align-items:center;gap:.5rem;
+  margin-bottom:.9rem;
+  transition:margin .18s ease}
+header.top.is-compact .header-chrome{
+  margin-bottom:0;flex:0 0 auto}
+/* `nav.breadcrumb` has its own margin in the base stylesheet; zero
+   it inside the chrome so the gap above is owned by .header-chrome. */
+.header-chrome .breadcrumb{margin:0}
+
+.header-fold{
+  width:1.9rem;height:1.9rem;padding:0;flex:0 0 auto;
+  background:var(--surface);color:var(--muted);
+  border:1px solid var(--line);border-radius:5px;
+  cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:color .12s ease, border-color .12s ease,
+             background-color .12s ease, transform .14s ease}
+.header-fold:hover{color:var(--ink);border-color:var(--accent)}
+.header-fold:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+.header-fold-icon{
+  width:.7rem;height:.7rem;
+  /* Chevron rendered via two CSS borders forming a "v". Rotates
+     180° in compact mode so the affordance reads "expand" instead
+     of "collapse". */
+  border-bottom:2px solid currentColor;
+  border-right:2px solid currentColor;
+  transform:rotate(45deg) translate(-2px,-2px);
+  transition:transform .18s ease}
+header.top.is-compact .header-fold-icon{
+  transform:rotate(225deg) translate(-2px,-2px)}
+header.top.is-compact nav.breadcrumb{
+  margin:0;flex:0 0 auto;
+  /* In compact mode the parent's mono-uppercase styling no longer
+     applies — the inner anchor takes over with sans + button chrome.
+     Reset font-family/case so descendants don't inherit stale values. */
+  font-family:var(--sans);text-transform:none;letter-spacing:0}
+/* Button-style breadcrumb in compact mode. The full-header breadcrumb
+   is a magazine-y small uppercase mono link (works because it sits in
+   its own row with breathing room above the title). Once it gets
+   pulled inline with the title, the same treatment reads as a tiny
+   subdued label, not a clickable affordance — fix is to give it
+   real button chrome (border + background + shadow + hover) so it
+   visibly invites a click and aligns vertically with the title's
+   x-height instead of floating mid-line. */
+header.top.is-compact nav.breadcrumb a{
+  font-family:var(--sans);
+  font-size:.82rem;
+  font-weight:500;
+  letter-spacing:0;
+  text-transform:none;
+  color:var(--ink-2);
+  padding:.42rem .8rem;
+  margin-left:0;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:6px;
+  box-shadow:var(--shadow-sm);
+  display:inline-flex;align-items:center;gap:.45rem;
+  transition:background .14s ease,border-color .14s ease,
+    color .14s ease,box-shadow .14s ease,gap .18s ease}
+header.top.is-compact nav.breadcrumb a:hover{
+  background:var(--accent-soft);
+  border-color:var(--accent);
+  color:var(--accent-2);
+  box-shadow:var(--shadow-md);
+  gap:.6rem}
+header.top.is-compact nav.breadcrumb a:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+header.top.is-compact .run{
+  font-size:1.1rem;margin:0;font-weight:600;
+  letter-spacing:-.005em;
+  /* Don't ellipsize: run names are short slugs (auto-generated like
+     "run_20260512_032739" or user-chosen). `flex:0 0 auto` lets the
+     element take its natural width; the step-tabs use `margin:0 0 0
+     auto` to push themselves against the right edge regardless. */
+  flex:0 0 auto;
+  white-space:nowrap}
+header.top.is-compact .step-tabs{
+  margin:0 0 0 auto;flex:0 0 auto;
+  padding:.22rem}
+header.top.is-compact .step-tab{
+  padding:.32rem .65rem;font-size:.78rem}
+.run,.step-tabs,nav.breadcrumb a{
+  transition:font-size .18s ease,padding .18s ease,margin .18s ease}
+
+/* Brand: small mono breadcrumb-y label above the title.
+   "FigMirror · workspace" / "FigMirror · trajectory" — paired with
+   a small teal square that anchors the brand identity. */
+.brand{
+  font-family:var(--mono);font-size:.7rem;
+  color:var(--muted);font-weight:500;
+  letter-spacing:.16em;text-transform:uppercase;
+  display:flex;align-items:center;gap:.55rem}
+.brand::before{
+  content:'';width:9px;height:9px;
+  background:var(--accent);border-radius:2px;
+  box-shadow:0 0 0 3px var(--accent-glow);
+  flex:none;display:inline-block}
+
+/* Page title — workspace name on landing, run name on trajectory.
+   Plus Jakarta semibold-700 with tight tracking; 2.2rem reads as
+   editorial-tech without being shouty. */
+.run{
+  font-family:var(--sans);
+  font-size:2.2rem;font-weight:700;
+  margin:.5rem 0 .3rem;
+  letter-spacing:-.025em;line-height:1.12;
+  color:var(--ink);
+  font-feature-settings:'ss01' 1,'kern' 1}
+
+.run-path{
+  font-family:var(--mono);font-size:.78rem;
+  color:var(--muted-2);
+  word-break:break-all;letter-spacing:.01em}
+
+
+/* ─────────── [4] TRAJECTORY page ─────────── */
+
+/* Breadcrumb sits above the brand in workspace-linked trajectories. */
+nav.breadcrumb{
+  font-family:var(--mono);font-size:.7rem;
+  letter-spacing:.14em;text-transform:uppercase;
+  margin-bottom:.6rem}
+nav.breadcrumb a{
+  color:var(--muted);text-decoration:none;
+  display:inline-flex;align-items:center;gap:.45rem;
+  padding:.2rem .55rem;margin-left:-.55rem;
+  border-radius:4px;
+  transition:color .14s ease,background .14s ease,gap .18s ease}
+nav.breadcrumb a:hover{
+  color:var(--accent);background:var(--accent-soft);
+  gap:.65rem}
+nav.breadcrumb a:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+/* Live status — pulsing teal dot if active. Mono timestamp/text. */
+.status{
+  display:flex;align-items:center;gap:.6rem;
+  margin-top:.7rem;
+  font-family:var(--mono);font-size:.74rem;
+  color:var(--muted);letter-spacing:.04em}
+.status .dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--line-2);flex:none;
+  display:inline-block}
+.status.live .dot{
+  background:var(--accent);
+  box-shadow:0 0 0 0 var(--accent-glow);
+  animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(13,148,136,.45)}
+  70%{box-shadow:0 0 0 10px rgba(13,148,136,0)}
+  100%{box-shadow:0 0 0 0 rgba(13,148,136,0)}
+}
+
+/* Iter table-of-contents nav. Reads as a row of axis tick markers. */
+nav.toc{
+  margin:1.4rem 0 1.6rem;padding:.55rem .65rem;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;box-shadow:var(--shadow-sm);
+  display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;
+  font-family:var(--mono);font-size:.78rem}
+nav.toc .label{
+  color:var(--muted-2);margin:0 .55rem 0 .3rem;
+  font-size:.7rem;letter-spacing:.14em;text-transform:uppercase}
+nav.toc a{
+  padding:.28rem .68rem;border-radius:5px;
+  color:var(--ink-2);text-decoration:none;
+  font-family:var(--mono);font-size:.78rem;letter-spacing:.02em;
+  transition:background .14s ease,color .14s ease}
+nav.toc a:hover{background:var(--accent-soft);color:var(--accent-2)}
+nav.toc a.is-final{color:var(--good)}
+nav.toc a.is-selected::after{
+  content:'★';margin-left:.3rem;font-size:.7em;color:var(--accent)}
+
+/* Cards — pure-white surfaces lifted off the tinted body.
+   Soft single shadow + thin border (Vercel-style). */
+section.card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:1.4rem 1.6rem;margin:1.1rem 0;
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  transition:border-color .14s ease,box-shadow .14s ease}
+section.card:hover{box-shadow:var(--shadow-md)}
+section.card.selected{
+  border-color:var(--accent-line);
+  box-shadow:inset 3px 0 0 var(--accent),var(--shadow-sm)}
+section.card.final{
+  border-color:var(--good-line);
+  background:linear-gradient(180deg,
+    rgba(220,252,231,.4) 0%,var(--surface) 60%)}
+section.card.final::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--good);border-radius:10px 0 0 10px}
+
+.iter-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:1rem;margin-bottom:1rem}
+.iter-head h2{
+  margin:0;font-family:var(--sans);
+  font-size:1.1rem;font-weight:600;letter-spacing:-.012em;
+  line-height:1.25;color:var(--ink);
+  display:flex;align-items:center;gap:.6rem}
+
+.sel-badge{
+  display:inline-block;font-family:var(--mono);
+  font-size:.62rem;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;
+  padding:.2rem .5rem;border-radius:3px;
+  background:var(--accent-soft);color:var(--accent-2);
+  border:1px solid var(--accent-line)}
+
+.pills{display:flex;gap:.35rem;flex-wrap:wrap}
+.pill{
+  display:inline-block;padding:.2rem .65rem;border-radius:999px;
+  font-family:var(--mono);font-size:.7rem;font-weight:500;
+  letter-spacing:.02em;
+  border:1px solid transparent}
+.pill.good{background:var(--good-bg);color:var(--good);
+  border-color:var(--good-line)}
+.pill.bad{background:var(--bad-bg);color:var(--bad);
+  border-color:var(--bad-line)}
+.pill.neutral{background:var(--neutral-bg);color:var(--neutral);
+  border-color:var(--neutral-line)}
+.pill.mute{
+  background:#f1f3f5;color:var(--muted);
+  border-color:var(--line);
+  max-width:32rem;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+
+/* Image grid — generated vs reference side-by-side. Figure
+   surfaces stay neutral so the user's actual content is the
+   focus, not the chrome. */
+.img-pair{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.img-pair figure{
+  margin:0;background:var(--bg-deep);
+  border:1px solid var(--line);border-radius:8px;
+  padding:.55rem;text-align:center}
+.img-pair img{
+  max-width:100%;height:auto;border-radius:4px;cursor:zoom-in;
+  transition:transform .14s ease}
+.img-pair img:hover{transform:scale(1.005)}
+figcaption{
+  font-family:var(--mono);color:var(--muted);font-size:.7rem;
+  margin-top:.55rem;letter-spacing:.06em;text-transform:uppercase}
+section.card > figure{margin:0;text-align:center}
+section.card > figure img{
+  max-width:100%;border-radius:6px;
+  border:1px solid var(--line)}
+
+/* Collapsibles */
+details{
+  margin-top:.7rem;font-size:.88rem;
+  border-top:1px solid var(--line);padding-top:.65rem}
+details:first-of-type{border-top:0;padding-top:0}
+details summary{
+  cursor:pointer;color:var(--accent);list-style:none;
+  padding:.2rem 0;user-select:none;font-weight:500;
+  font-family:var(--mono);font-size:.78rem;letter-spacing:.02em;
+  transition:color .12s ease}
+details summary:hover{color:var(--accent-2)}
+details summary::-webkit-details-marker{display:none}
+details summary::before{
+  content:'›';display:inline-block;margin-right:.5rem;
+  transition:transform .14s ease;color:var(--muted-2)}
+details[open] summary::before{transform:rotate(90deg);color:var(--accent)}
+details pre{
+  background:#0f172a;color:#e2e8f0;
+  padding:.95rem 1.1rem;border-radius:8px;
+  font-family:var(--mono);font-size:.78rem;
+  line-height:1.6;overflow-x:auto;
+  max-height:380px;margin:.6rem 0 0}
+.anchor-list{
+  margin:.55rem 0 .2rem 0;
+  list-style:none;padding:0;
+  font-size:.86rem;color:var(--ink-2);
+  display:flex;flex-direction:column;gap:.32rem}
+.anchor-list li{margin:0}
+/* Items WITH a parsed [L<n>] prefix: drop the bullet, lay out as
+   chip + text in a flex row so the badges align to a stable left
+   gutter (visually scannable as a column of L1 / L2 markers). */
+.anchor-list li.has-anchor-tag{
+  display:flex;align-items:flex-start;gap:.55rem;
+  line-height:1.55}
+.anchor-list .anchor-text{flex:1;min-width:0}
+/* Anchor-level chip — small, square, uppercase mono. L1 (foundational)
+   is the dominant teal; L2 (refined / aesthetic) is the secondary
+   amber. Same pill family as elsewhere but tighter for inline use. */
+.anchor-tag{
+  flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:1.85rem;height:1.35rem;
+  padding:0 .42rem;
+  font-family:var(--mono);font-size:.66rem;font-weight:600;
+  letter-spacing:.06em;
+  border-radius:4px;border:1px solid transparent;
+  margin-top:.05rem;
+  text-transform:none}
+.anchor-tag.tag-l1{
+  background:var(--accent-soft);color:var(--accent-2);
+  border-color:var(--accent-line)}
+.anchor-tag.tag-l2{
+  background:#fef3c7;color:#a16207;        /* amber-100 / amber-700 */
+  border-color:#fcd34d}
+/* Levels 3+ rare today; degrade to a neutral so they still render. */
+.anchor-tag[class*="tag-l"]:not(.tag-l1):not(.tag-l2){
+  background:#f1f5f9;color:var(--muted-2);
+  border-color:var(--line)}
+
+.missing{
+  font-family:var(--mono);font-size:.82rem;
+  color:var(--bad);background:var(--bad-bg);
+  border:1px solid var(--bad-line);border-radius:6px;
+  padding:.85rem 1rem;letter-spacing:.02em}
+
+.iter-render-pending{
+  display:flex;align-items:center;gap:.7rem;
+  font-family:var(--mono);font-size:.82rem;
+  color:var(--muted);
+  background:var(--surface);
+  border:1px dashed var(--accent-line);
+  border-radius:6px;
+  padding:.85rem 1rem;letter-spacing:.02em}
+.iter-render-pending-spinner{
+  width:1.1em;height:1.1em;flex:none;
+  border:2px solid rgba(13,148,136,.18);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .9s linear infinite}
+.iter-render-pending-copy{min-width:0}
+
+/* Lightbox */
+.lightbox{
+  position:fixed;inset:0;display:none;z-index:1000;
+  background:rgba(15,23,42,.92);
+  cursor:zoom-out;
+  flex-direction:column;align-items:center;justify-content:center;
+  padding:2rem;
+  backdrop-filter:saturate(140%) blur(8px);
+  -webkit-backdrop-filter:saturate(140%) blur(8px)}
+.lightbox.open{display:flex;animation:fade .18s ease-out both}
+.lightbox img{
+  max-width:96vw;max-height:82vh;border-radius:6px;
+  box-shadow:0 30px 80px rgba(0,0,0,.5),
+    0 0 0 1px rgba(255,255,255,.08);
+  /* Wheel-zoom + drag-pan apply transforms via inline style;
+     transition smooths the wheel change but is short enough not to
+     lag pan dragging. */
+  transition:transform .08s linear;
+  cursor:zoom-in;
+  user-select:none;-webkit-user-drag:none}
+/* Once zoomed past 1×, cursor shifts to grab/grabbing so the user
+   knows they can pan. JS toggles `is-zoomed` on the lightbox + sets
+   `is-panning` on the image while mousedown is held. */
+.lightbox.is-zoomed img{cursor:grab}
+.lightbox.is-zoomed img.is-panning{cursor:grabbing;
+  transition:none  /* live drag — no transition lag */}
+.lightbox .controls{
+  margin-top:1.1rem;color:#e2e8f0;
+  font-family:var(--mono);font-size:.76rem;
+  display:flex;gap:.5rem;align-items:center}
+.lightbox .controls .hint{
+  margin-right:.7rem;color:#94a3b8;font-size:.72rem;
+  letter-spacing:.04em}
+.lightbox .controls kbd{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.18);border-radius:3px;
+  padding:.1rem .4rem;font-family:var(--mono);font-size:.7rem;
+  color:#e2e8f0}
+.lightbox .controls button{
+  background:#fff;color:var(--ink);
+  border:0;border-radius:5px;
+  padding:.42rem .95rem;cursor:pointer;
+  font-family:var(--mono);font-size:.72rem;
+  letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+  transition:background .14s ease,transform .08s ease}
+.lightbox .controls button:hover{background:#f1f5f9}
+.lightbox .controls button:active{transform:translateY(1px)}
+
+/* ─── Inputs section (Stage D — collapsed by default) ───
+   Inputs lives at the top of the trajectory page in a <details>
+   that's closed on first paint. Reduces vertical noise so the iter
+   strip is what the user sees first. */
+.inputs-section{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:.4rem 1.2rem;margin:1rem 0;
+  box-shadow:var(--shadow-sm)}
+.inputs-section details{margin:.4rem 0;border:0;padding:0}
+.inputs-section details summary{
+  font-family:var(--sans);font-size:1rem;font-weight:600;
+  letter-spacing:-.005em;color:var(--ink);
+  text-transform:none;padding:.6rem 0}
+.inputs-section details summary:hover{color:var(--accent-2)}
+.inputs-section .inputs-ref{margin:.55rem 0 .8rem;text-align:left}
+.inputs-section .inputs-ref img{
+  max-width:340px;border-radius:6px;border:1px solid var(--line)}
+.inputs-section .inputs-data{
+  margin-top:.6rem;background:var(--bg-deep);
+  border:1px solid var(--line);border-radius:6px;
+  padding:.7rem .85rem}
+.inputs-section .inputs-data-meta{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:.4rem}
+.inputs-section .inputs-data pre{
+  margin:0;padding:0;background:transparent;border:0;
+  font-family:var(--mono);font-size:.78rem;color:var(--ink-2);
+  line-height:1.55;max-height:9rem;overflow:auto}
+
+/* ─── Iter strip (Stage D) ───
+   Horizontal scroll of iter thumbnails with Dock-style cursor-proximity
+   magnification driven by --scale CSS variable from trajectory.js. */
+.iter-strip-section{margin:1.2rem 0 1rem}
+.iter-strip-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:1rem;margin-bottom:.7rem}
+.iter-strip-head h2{
+  margin:0;font-family:var(--sans);font-size:1.1rem;font-weight:600;
+  letter-spacing:-.012em;color:var(--ink)}
+.iter-strip-hint{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;
+  color:var(--muted)}
+
+.iter-strip{
+  display:flex;gap:.75rem;
+  /* Vertical padding has to absorb the dock-magnify scale envelope.
+     With amplitude 0.25 + transform-origin:center, a 160px-tall thumb
+     grows to ~200px (≈20px each above and below); 2rem ≈ 32px on each
+     side gives room without clipping. overflow-x:auto implicitly
+     coerces overflow-y to auto in browsers, so growth that exceeds
+     this padding would otherwise be clipped/scrolled. */
+  padding:2rem .55rem;
+  overflow-x:auto;
+  scroll-behavior:smooth;
+  scrollbar-width:thin}
+.iter-strip::-webkit-scrollbar{height:6px}
+.iter-strip::-webkit-scrollbar-thumb{
+  background:var(--line-2);border-radius:3px}
+
+.iter-thumb{
+  position:relative;flex:none;
+  width:120px;
+  display:flex;flex-direction:column;gap:.4rem;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:.45rem;
+  cursor:pointer;
+  /* center transform-origin so dock magnification grows symmetrically;
+     the strip's vertical padding absorbs the envelope in both
+     directions. With transform-origin:bottom the thumb only grew
+     upward, defeating the strip's bottom padding. */
+  transform-origin:center;
+  transform:scale(var(--scale,1));
+  transition:transform .12s ease,border-color .14s ease,
+    box-shadow .14s ease;
+  appearance:none;-webkit-appearance:none;
+  font:inherit;color:inherit;text-align:left}
+.iter-thumb:hover{
+  border-color:var(--accent-line);box-shadow:var(--shadow-md)}
+.iter-thumb:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+  border-color:var(--accent)}
+.iter-thumb.is-active{
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px var(--accent-glow),var(--shadow-sm)}
+.iter-thumb.is-selected{border-color:var(--good)}
+
+.iter-thumb-frame{
+  width:100%;height:80px;
+  background:#fff;
+  border-radius:5px;border:1px solid var(--line);
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+.iter-thumb-frame img{
+  max-width:100%;max-height:100%;object-fit:contain}
+.iter-thumb-empty{
+  width:100%;height:100%;
+  background-image:repeating-linear-gradient(
+    45deg,transparent 0 5px,rgba(13,148,136,.06) 5px 10px)}
+
+.iter-thumb-meta{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:.4rem}
+.iter-thumb-num{
+  font-family:var(--mono);font-size:.78rem;font-weight:600;
+  color:var(--ink-2);letter-spacing:.04em}
+.iter-thumb-pill{
+  font-size:.62rem;padding:.1rem .45rem;
+  letter-spacing:.06em;text-transform:uppercase}
+.iter-thumb-selected{
+  position:absolute;top:.35rem;right:.45rem;
+  color:var(--good);font-size:.85rem;
+  text-shadow:0 0 4px rgba(255,255,255,.9)}
+
+/* ─── Iter expanded panel (Stage D) ───
+   Pre-rendered for every iter; one is unhidden at a time based on
+   the URL hash (#iter-N). Two-column grid: image left, metadata +
+   action buttons right. */
+.iter-expanded{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:1.4rem 1.6rem;margin:.4rem 0 1.2rem;
+  box-shadow:var(--shadow-sm);
+  scroll-margin-top:8rem}
+.iter-expanded.is-selected{
+  border-color:var(--good);
+  box-shadow:0 0 0 1px var(--good-bg),var(--shadow-sm)}
+.iter-expanded .iter-head{margin-bottom:1.1rem}
+.iter-expanded-grid{
+  display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);
+  gap:1.4rem}
+@media (max-width:880px){
+  .iter-expanded-grid{grid-template-columns:1fr}}
+.iter-expanded-image figure{margin:0 0 .85rem;text-align:center;
+  position:relative}
+/* Inline preview size — the original 100% sized to the column (~600px)
+   which made the figure dominate the viewport. Users who need detail
+   click the image for the lightbox; the inline render just needs to
+   be "obviously the right figure". 420px wide × 60vh tall handles
+   both landscape + portrait plots without page-scroll. */
+.iter-expanded-image figure img{
+  display:inline-block;
+  max-width:min(420px,100%);
+  max-height:60vh;
+  width:auto;height:auto;
+  border-radius:6px;border:1px solid var(--line);
+  cursor:zoom-in;
+  transition:transform .14s ease,box-shadow .14s ease}
+.iter-expanded-image figure img:hover{
+  transform:scale(1.005);
+  box-shadow:0 4px 14px rgba(13,148,136,.18)}
+.iter-expanded-image figcaption{
+  font-family:var(--mono);color:var(--muted);font-size:.7rem;
+  margin-top:.45rem;letter-spacing:.06em;text-transform:uppercase}
+/* The reference figure under the iter image gets a smaller preview
+   still — it's secondary, used only for at-a-glance comparison. */
+.iter-expanded-ref figcaption{color:var(--muted-2)}
+.iter-expanded-ref img{
+  opacity:.94;
+  max-width:min(320px,100%) !important;
+  max-height:40vh !important}
+
+/* "click to enlarge" affordance. Without this, the cursor:zoom-in
+   change is too subtle for users to discover the lightbox is one
+   click away. The badge sits at the bottom-right of the image and
+   fades in on hover; pointer-events:none so it doesn't block the
+   click-to-open. Applied to any figure that the trajectory.js
+   click handler is wired to (iter expanded, inputs reference,
+   final figure). */
+.iter-expanded-image figure,
+.iter-expanded-ref,
+.inputs-section figure.inputs-ref,
+section.card.final figure{
+  position:relative}
+.iter-expanded-image figure::after,
+.iter-expanded-ref::after,
+.inputs-section figure.inputs-ref::after,
+section.card.final figure::after{
+  content:'↗ click to enlarge';
+  position:absolute;
+  bottom:.6rem;right:.6rem;
+  background:rgba(15,23,42,.78);color:#e2e8f0;
+  font-family:var(--mono);font-size:.66rem;
+  letter-spacing:.06em;
+  padding:.22rem .55rem;border-radius:3px;
+  pointer-events:none;
+  opacity:0;transform:translateY(2px);
+  transition:opacity .15s ease,transform .15s ease;
+  /* Keep above the image but below modals / lightbox. */
+  z-index:1}
+.iter-expanded-image figure:hover::after,
+.iter-expanded-ref:hover::after,
+.inputs-section figure.inputs-ref:hover::after,
+section.card.final figure:hover::after{
+  opacity:1;transform:translateY(0)}
+/* When figcaption is also at the bottom, push the badge above it. */
+.iter-expanded-image figure::after{bottom:2.1rem}
+section.card.final figure::after{bottom:2.1rem}
+
+/* Cursor + hover lift for the other clickable preview images. */
+.iter-expanded-ref img,
+.inputs-section figure.inputs-ref img,
+section.card.final figure img{
+  cursor:zoom-in;
+  transition:transform .14s ease,box-shadow .14s ease}
+.iter-expanded-ref img:hover,
+.inputs-section figure.inputs-ref img:hover,
+section.card.final figure img:hover{
+  transform:scale(1.005);
+  box-shadow:0 4px 14px rgba(13,148,136,.16)}
+.iter-expanded-aside{display:flex;flex-direction:column;gap:.7rem}
+
+.iter-actions{
+  display:flex;gap:.55rem;flex-wrap:wrap;margin-bottom:.5rem}
+.iter-action{
+  font-family:var(--sans);font-size:.84rem;font-weight:500;
+  padding:.45rem .85rem;
+  background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:6px;
+  text-decoration:none;cursor:pointer;
+  transition:background .14s ease,border-color .14s ease,color .14s ease}
+.iter-action:hover{
+  background:var(--accent-soft);border-color:var(--accent);
+  color:var(--accent-2)}
+.iter-action:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+/* Final-card refinement: PDF link sits at the bottom edge as a chip. */
+section.card.final .final-pdf{margin:.9rem 0 0;font-size:.86rem}
+section.card.final .final-pdf a{
+  display:inline-flex;align-items:center;gap:.4rem;
+  padding:.45rem .85rem;
+  background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:6px;
+  font-weight:500;text-decoration:none;
+  transition:background .14s ease,border-color .14s ease}
+section.card.final .final-pdf a:hover{
+  background:var(--accent-soft);border-color:var(--accent);
+  color:var(--accent-2)}
+
+/* ─── Modal (Stage D — Export Code) ───
+   Full-viewport overlay + centered card. Body fetched from
+   /api/runs/<name>/code/<iter> (server-side highlighter). */
+.modal{position:fixed;inset:0;display:none;z-index:1200}
+.modal:not([hidden]){
+  display:flex;align-items:center;justify-content:center;
+  padding:2rem;animation:fade .16s ease-out both}
+.modal-overlay{
+  position:absolute;inset:0;
+  background:rgba(15,23,42,.55);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  cursor:pointer}
+.modal-card{
+  position:relative;
+  width:min(880px,96vw);max-height:88vh;
+  display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;
+  box-shadow:var(--shadow-lg)}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:1rem;padding:.95rem 1.1rem;
+  border-bottom:1px solid var(--line)}
+.modal-title{
+  margin:0;font-family:var(--sans);font-size:.95rem;
+  font-weight:600;color:var(--ink);letter-spacing:-.005em}
+.modal-title-meta{
+  margin-left:.5rem;font-family:var(--mono);
+  font-size:.78rem;font-weight:400;letter-spacing:.04em}
+.modal-actions{display:flex;gap:.5rem;align-items:center}
+.modal-copy,.modal-close{
+  font-family:var(--sans);font-size:.82rem;font-weight:500;
+  padding:.35rem .75rem;
+  background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:5px;
+  cursor:pointer;
+  transition:background .12s ease,border-color .12s ease}
+.modal-copy:hover{
+  background:var(--accent-soft);border-color:var(--accent);
+  color:var(--accent-2)}
+.modal-copy.is-copied{
+  background:var(--good-bg);border-color:var(--good-line);
+  color:var(--good)}
+.modal-close{
+  font-size:1.05rem;line-height:1;padding:.3rem .55rem;
+  color:var(--muted)}
+.modal-close:hover{
+  color:var(--ink);border-color:var(--line-2)}
+.modal-body{flex:1;overflow:auto;padding:1rem 1.1rem}
+.modal-body pre.py{
+  margin:0;background:#0f172a;color:#e2e8f0;
+  padding:1rem 1.15rem;border-radius:6px;
+  font-family:var(--mono);font-size:.82rem;line-height:1.6;
+  border:1px solid #1e293b}
+
+/* ─── Step toggle tabs (Stage E) ───
+   Sits in the trajectory page header next to the title. Two tabs
+   ("01 Browse iterations" / "02 Refine via chat"); the link form
+   means a click reloads the page with ?step=N — fine for Phase 2,
+   smooth client-side toggle is a polish for later. */
+.step-tabs{
+  display:inline-flex;gap:.4rem;
+  margin-top:.85rem;
+  padding:.3rem;background:var(--bg-deep);
+  border:1px solid var(--line);border-radius:8px;
+  align-items:stretch}
+.step-tab{
+  display:inline-flex;align-items:center;gap:.5rem;
+  padding:.45rem .85rem;border-radius:5px;
+  text-decoration:none;color:var(--muted);
+  font-family:var(--sans);font-size:.84rem;font-weight:500;
+  transition:background .14s ease,color .14s ease}
+.step-tab:hover{background:var(--surface);color:var(--ink-2)}
+.step-tab.is-active{
+  background:var(--surface);color:var(--ink);
+  box-shadow:var(--shadow-sm)}
+.step-tabs-num{
+  font-family:var(--mono);font-size:.7rem;
+  letter-spacing:.12em;color:var(--accent);
+  font-weight:600}
+.step-tab.is-active .step-tabs-num{color:var(--accent-2)}
+
+/* primary action variant (Select as Template) */
+.iter-action.iter-action-primary{
+  background:var(--accent);color:#fff;border-color:var(--accent);
+  font-weight:600;
+  box-shadow:var(--shadow-sm)}
+.iter-action.iter-action-primary:hover{
+  background:var(--accent-2);color:#fff;
+  border-color:var(--accent-2);
+  box-shadow:var(--shadow-md)}
+
+/* ─── Step 2 chat refinement (Stage E) ───
+   Two-column: template image + direct controls (left); chat log +
+   send form (right). Collapses to single column under 880px. */
+.step2-section{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:1.4rem 1.6rem;margin:1rem 0;
+  box-shadow:var(--shadow-sm)}
+.step2-section .step2-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:1rem;margin-bottom:1.1rem}
+.step2-section .step2-head h2{
+  margin:0;font-family:var(--sans);font-size:1.1rem;font-weight:600;
+  letter-spacing:-.012em;color:var(--ink)}
+.step2-empty-state{padding:2rem 1.6rem;text-align:center}
+
+.step2-grid{
+  display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);
+  gap:1.5rem}
+@media (max-width:880px){
+  .step2-grid{grid-template-columns:1fr}}
+
+.step2-left{display:flex;flex-direction:column;gap:1rem;min-width:0}
+.step2-right{display:flex;flex-direction:column;gap:.85rem;
+  min-width:0;min-height:32rem}
+
+.step2-template,.step2-current{margin:0;text-align:center}
+.step2-template img,.step2-current img{
+  max-width:100%;border-radius:6px;border:1px solid var(--line);
+  background:#fff}
+.step2-template figcaption,.step2-current figcaption{
+  font-family:var(--mono);color:var(--muted);font-size:.7rem;
+  margin-top:.45rem;letter-spacing:.06em;text-transform:uppercase}
+
+/* Direct controls panel */
+.step2-controls{
+  background:var(--bg-deep);border:1px solid var(--line);
+  border-radius:8px;padding:.95rem 1.05rem}
+.step2-controls h3{
+  margin:0 0 .65rem;font-family:var(--sans);font-size:.86rem;
+  font-weight:600;color:var(--ink-2);
+  display:flex;align-items:baseline;gap:.5rem}
+.step2-controls h3 .muted{font-size:.75rem;font-weight:400}
+.step2-controls-list{display:flex;flex-direction:column;gap:.55rem}
+.step2-controls-empty{
+  font-family:var(--mono);font-size:.75rem;
+  color:var(--muted);letter-spacing:.04em;line-height:1.5}
+.step2-control{
+  display:grid;grid-template-columns:1fr auto;gap:.7rem;
+  align-items:center;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:6px;
+  padding:.5rem .7rem}
+.step2-control-label{
+  font-family:var(--mono);font-size:.78rem;color:var(--ink-2);
+  letter-spacing:.02em}
+.step2-control-input{
+  font-family:var(--mono);font-size:.84rem;
+  width:5.5rem;text-align:right;
+  padding:.32rem .5rem;
+  border:1px solid var(--line);border-radius:5px;
+  background:var(--surface);color:var(--ink);
+  transition:border-color .14s ease,box-shadow .14s ease}
+.step2-control-input:focus{
+  outline:0;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-glow)}
+.step2-control-value{
+  font-family:var(--mono);font-size:.82rem;color:var(--muted);
+  font-weight:500}
+
+/* Chat log */
+.step2-chat{
+  flex:1;min-height:18rem;
+  overflow-y:auto;
+  padding:.85rem 1rem;
+  background:var(--bg-deep);border:1px solid var(--line);
+  border-radius:8px;
+  display:flex;flex-direction:column;gap:.7rem}
+.step2-chat-empty{
+  margin:auto 0;padding:1.2rem 0;text-align:center;
+  color:var(--muted-2);font-size:.88rem;line-height:1.6}
+.step2-chat-empty p{margin:0 0 .35rem}
+.step2-chat-empty code{
+  font-size:.78rem;padding:.05rem .35rem;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:3px}
+
+.step2-msg-user,
+.step2-msg-ai,
+.step2-msg-system{
+  display:flex;gap:.65rem;align-items:flex-start;
+  padding:.5rem 0;
+  font-size:.88rem;line-height:1.55}
+.step2-msg-system{
+  font-family:var(--mono);font-size:.74rem;color:var(--muted);
+  border-top:1px dashed var(--line);
+  padding:.55rem 0;justify-content:center}
+.step2-msg-system .step2-msg-system{display:contents}
+
+.step2-msg-role{
+  flex:none;
+  font-family:var(--mono);font-size:.66rem;
+  letter-spacing:.14em;text-transform:uppercase;font-weight:600;
+  padding:.18rem .5rem;border-radius:3px;line-height:1;
+  margin-top:.18rem;
+  min-width:2.5rem;text-align:center}
+.step2-msg-user .step2-msg-role{
+  background:var(--accent-soft);color:var(--accent-2);
+  border:1px solid var(--accent-line)}
+.step2-msg-ai .step2-msg-role{
+  background:var(--bg-alt);color:var(--ink-2);
+  border:1px solid var(--line-2)}
+.step2-msg-body{flex:1;min-width:0}
+.step2-msg-review{margin:.05rem 0 .35rem;color:var(--ink)}
+.step2-msg-delta{
+  display:flex;flex-wrap:wrap;gap:.35rem;margin:.4rem 0}
+.step2-msg-delta code{
+  font-family:var(--mono);font-size:.74rem;
+  padding:.18rem .5rem;
+  background:var(--accent-soft);color:var(--accent-2);
+  border:1px solid var(--accent-line);border-radius:3px}
+.step2-msg-img{
+  display:block;max-width:100%;margin-top:.5rem;
+  border:1px solid var(--line);border-radius:5px;
+  background:#fff}
+
+/* Send form */
+.step2-form{display:flex;flex-direction:column;gap:.55rem}
+.step2-msg{
+  font-family:var(--sans);font-size:.92rem;
+  padding:.7rem .8rem;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:6px;
+  color:var(--ink);width:100%;line-height:1.55;resize:vertical;
+  min-height:3.5rem;
+  transition:border-color .14s ease,box-shadow .14s ease}
+.step2-msg:focus{
+  outline:0;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-glow)}
+.step2-form-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:.7rem}
+.step2-form-hint{
+  font-family:var(--mono);font-size:.7rem;
+  letter-spacing:.04em}
+.step2-form-hint kbd{
+  background:var(--bg-deep);border:1px solid var(--line);
+  border-radius:3px;padding:.05rem .35rem;
+  font-family:var(--mono);font-size:.7rem}
+.step2-send{
+  font-family:var(--sans);font-size:.86rem;font-weight:600;
+  padding:.55rem 1.1rem;
+  background:var(--accent);color:#fff;
+  border:0;border-radius:6px;cursor:pointer;
+  box-shadow:var(--shadow-sm),
+    inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .14s ease,box-shadow .14s ease,
+    transform .08s ease}
+.step2-send:hover{
+  background:var(--accent-2);
+  box-shadow:var(--shadow-md),0 0 0 4px var(--accent-glow),
+    inset 0 1px 0 rgba(255,255,255,.18)}
+.step2-send:active{transform:translateY(1px)}
+.step2-send:disabled{
+  background:var(--muted-2);cursor:not-allowed;
+  box-shadow:none;transform:none}
+.step2-cancel{
+  font-family:var(--sans);font-size:.82rem;
+  padding:.5rem .9rem;
+  background:transparent;color:var(--muted);
+  border:1px solid var(--line);border-radius:6px;cursor:pointer;
+  transition:color .12s ease,border-color .12s ease}
+.step2-cancel:hover{color:var(--fg);border-color:var(--accent)}
+
+/* ─── Step 2 "workbench" layout ───────────────────────────────────
+   Goal: in chat mode the user should never need to scroll the
+   outer page. The two images + controls panel stay on the left,
+   visible at a glance; chat history scrolls inside its own pane on
+   the right; the input box (textarea + Send) is anchored at the
+   bottom of the right column and never scrolls with history.
+   Only applies when <body class='is-step2'> — Step 1 keeps natural
+   flow. */
+body.is-step2{
+  height:100vh;
+  overflow:hidden;
+  display:flex;flex-direction:column}
+body.is-step2 > .top{flex:0 0 auto}
+body.is-step2 > .container{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  /* Keep horizontal centering (margin: 0 auto) from the base rule;
+     zero only the vertical margins so the flex-grow fills viewport.
+     Previously this said `margin:0` which left-aligned the workbench
+     against wide viewports — content stuck to the left edge with a
+     huge empty gap on the right. */
+  margin:0 auto;padding-top:.75rem;padding-bottom:.75rem;
+  /* Re-state max-width so the flex parent gives us the right width.
+     Base `.container` rule already has max-width:1180px but flex
+     items don't always inherit it correctly when the parent uses
+     flex-direction:column; restating is harmless and explicit. */
+  width:100%;max-width:1180px;
+  overflow:hidden}
+body.is-step2 .inputs-section{flex:0 0 auto;margin:0 0 .6rem}
+body.is-step2 .step2-section{
+  flex:1;min-height:0;
+  display:flex;flex-direction:column;
+  margin:0;padding:1rem 1.15rem}
+body.is-step2 .step2-head{margin:0 0 .6rem;flex:0 0 auto}
+body.is-step2 .step2-grid{
+  flex:1;min-height:0;
+  gap:1rem;
+  /* CRITICAL: force the grid's single row to fill the available
+     parent height (= flex:1 of .step2-section). Without this, the
+     row auto-sizes to its content's natural height — which means
+     children using `flex:1` to claim "all remaining height" inside
+     each column (.step2-controls inside .step2-left, .step2-chat
+     inside .step2-right) have no determinate parent height to
+     reference and collapse to 0. The minmax(0,1fr) variant (vs.
+     bare 1fr) lets the row also shrink past min-content when the
+     viewport is short, instead of overflowing. */
+  grid-template-rows:minmax(0,1fr)}
+body.is-step2 .step2-left{
+  /* Workbench left column = flex column.
+     - Two images at top, capped at 24vh each by the rules below.
+     - Direct controls panel claims flex:1 to fill remaining space.
+     - If content does overflow this column (very short viewport),
+       allow scroll on the column itself — better to scroll than to
+       have the controls panel get clipped to invisibility. */
+  display:flex;flex-direction:column;
+  min-height:0;
+  overflow-y:auto;
+  scrollbar-gutter:stable}
+body.is-step2 .step2-template,
+body.is-step2 .step2-current{flex:0 0 auto}
+body.is-step2 .step2-controls{
+  flex:1;
+  /* Defensive minimum so the panel is always visible even when
+     flex:1 math resolves to ~0 (subtle row-height edge cases on
+     short viewports). 11rem ≈ h3 + empty-state hint + padding. */
+  min-height:11rem;
+  display:flex;flex-direction:column}
+body.is-step2 .step2-right{
+  min-height:0;
+  /* form anchors at bottom; chat fills the rest */
+  gap:.65rem}
+body.is-step2 .step2-chat{
+  flex:1;min-height:0;
+  /* drop the leftover from non-workbench rule */
+  min-height:initial;
+  /* Same scrollbar-gutter rationale as .step2-left above — keep the
+     vertical gutter reserved so the chat pane width doesn't shift
+     when SSE adds the live bubble or new message rows. */
+  scrollbar-gutter:stable}
+body.is-step2 .step2-form{flex:0 0 auto}
+
+/* Cap image heights so template + current both fit alongside the
+   controls panel without forcing the left column to scroll for the
+   common case. Override the natural max-width:100% from base. */
+body.is-step2 .step2-template img,
+body.is-step2 .step2-current img{
+  max-height:24vh;width:auto;max-width:100%;
+  object-fit:contain;margin:0 auto;display:block}
+
+/* Tighten captions in workbench mode — they were oversized for the
+   compact images. */
+body.is-step2 .step2-template figcaption,
+body.is-step2 .step2-current figcaption{
+  margin-top:.25rem;font-size:.65rem}
+
+/* The Direct controls panel's flex+sizing is defined ONCE up at
+   `body.is-step2 .step2-controls` (with `flex:1` so it claims the
+   remaining vertical space in .step2-left). The duplicate rule that
+   used to sit here without `flex:1` would override + silently strip
+   the grow behavior — the panel collapsed to content-height. Bug
+   diagnosed via "two rules same specificity, last wins"; kept only
+   the upper definition. */
+body.is-step2 .step2-controls-list{
+  /* Take whatever vertical space the controls panel (flex:1 inside
+     the left column) hands us. Scroll INSIDE only when the rows
+     truly overflow this space — common case (~3-8 rcparam rows)
+     fits without any internal scrollbar. */
+  flex:1;min-height:0;
+  overflow-y:auto;overflow-x:hidden;
+  padding-right:.25rem;
+  scrollbar-gutter:stable}
+
+/* Compact the message body padding so more turns fit in the chat
+   pane without scrolling. */
+body.is-step2 .step2-msg-user,
+body.is-step2 .step2-msg-ai,
+body.is-step2 .step2-msg-system{padding:.35rem 0}
+body.is-step2 .step2-msg-img{max-height:30vh;object-fit:contain;margin-left:0}
+
+/* ─── Pending-adjustments badge near Send ─── */
+.step2-pending-badge{
+  font-family:var(--mono);font-size:.74rem;font-weight:600;
+  padding:.18rem .55rem;border-radius:10px;
+  background:var(--accent-glow);color:var(--accent-2);
+  border:1px solid var(--accent);
+  align-self:center}
+
+/* ─── Pending (dirty) state on a control row ─── */
+.step2-control-pending{
+  border-left:3px solid var(--accent);
+  padding-left:.25rem;
+  background:linear-gradient(90deg, var(--accent-glow) 0%, transparent 30%)}
+.step2-control-pending .step2-control-input{
+  border-color:var(--accent)}
+
+/* ─── Live SSE bubble (in-flight refine turn) ─── */
+.step2-msg-live{
+  position:relative;
+  border-left:2px solid var(--accent);
+  padding-left:.6rem;
+  margin-left:.2rem;
+  opacity:.95}
+.step2-msg-text-live{
+  margin:.2rem 0;font-family:var(--sans);font-size:.86rem;
+  color:var(--fg);white-space:pre-wrap;line-height:1.45}
+.step2-msg-text-live:empty::before{
+  content:"thinking…";
+  color:var(--muted);font-style:italic;font-size:.8rem}
+.step2-msg-tools-live{
+  margin:.4rem 0;display:flex;flex-direction:column;gap:.18rem}
+.step2-tool-row{
+  font-family:var(--mono);font-size:.74rem;line-height:1.3;
+  padding:.18rem .5rem;border-radius:4px;
+  background:var(--bg-deep);border:1px solid var(--line);
+  color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%}
+.step2-tool-running{color:var(--accent);border-color:var(--accent-glow);
+  animation:pulseAccent 1.6s ease-in-out infinite}
+.step2-tool-ok{color:#a3e3a3}
+.step2-tool-err{color:#f29191;border-color:#a04040}
+@keyframes pulseAccent{
+  0%,100%{box-shadow:0 0 0 0 var(--accent-glow)}
+  50%   {box-shadow:0 0 0 3px var(--accent-glow)}
+}
+.step2-msg-spinner{
+  display:inline-flex;gap:.2rem;margin-top:.3rem}
+.step2-msg-spinner span{
+  width:.4rem;height:.4rem;border-radius:50%;
+  background:var(--accent);opacity:.5;
+  animation:bounce 1.2s ease-in-out infinite}
+.step2-msg-spinner span:nth-child(2){animation-delay:.15s}
+.step2-msg-spinner span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{
+  0%,100%{transform:translateY(0);opacity:.4}
+  50%   {transform:translateY(-3px);opacity:1}
+}
+
+/* ─── Right-panel: showing previous via press-and-hold ─── */
+.step2-current{position:relative}
+.step2-current-prev img{
+  filter:saturate(.6) brightness(.92);
+  outline:2px dashed var(--accent);outline-offset:-2px}
+.step2-current-prev::after{
+  content:"previous";
+  position:absolute;top:6px;left:6px;
+  background:var(--accent);color:#fff;
+  padding:.15rem .45rem;border-radius:4px;
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  pointer-events:none}
+
+/* ─── Phase 3: multi-baseline picker bar below the iter strip ─── */
+.baseline-multiselect{
+  display:flex;flex-wrap:wrap;gap:.6rem .8rem;align-items:center;
+  margin:.6rem 0 .2rem;padding:.6rem .8rem;
+  background:var(--bg-soft);border:1px dashed var(--line);
+  border-radius:8px}
+.baseline-ms-label{font-family:var(--sans);font-size:.82rem;margin-right:.2rem}
+.baseline-ms-item{
+  display:inline-flex;align-items:center;gap:.3rem;
+  font-family:var(--mono);font-size:.78rem;color:var(--fg);
+  padding:.18rem .45rem;border:1px solid var(--line);border-radius:4px;
+  cursor:pointer;user-select:none}
+.baseline-ms-item:hover{border-color:var(--accent)}
+.baseline-ms-cb{accent-color:var(--accent);margin:0}
+.baseline-ms-go{
+  margin-left:auto;
+  font-family:var(--sans);font-size:.84rem;font-weight:600;
+  text-decoration:none;color:#fff;background:var(--accent);
+  padding:.4rem .8rem;border:0;border-radius:6px;
+  box-shadow:var(--shadow-sm);cursor:pointer}
+.baseline-ms-go:hover:not(:disabled){background:var(--accent-2)}
+.baseline-ms-go:disabled{
+  background:var(--muted-2);color:var(--bg-soft);
+  cursor:not-allowed;box-shadow:none;opacity:.7}
+#baseline-ms-count{font-family:var(--mono);font-size:.78rem;
+  margin-left:.15rem}
+
+/* ─── Syntax highlight tokens (consumed by figcopy_static/highlight.py) ───
+   Tuned for readability on the dark code background. */
+.py .py-kw       {color:#c084fc;font-weight:500}    /* purple — keywords */
+.py .py-builtin  {color:#7dd3fc}                     /* sky — builtins */
+.py .py-str      {color:#86efac}                     /* green — strings */
+.py .py-num      {color:#fcd34d}                     /* amber — numbers */
+.py .py-comment  {color:#94a3b8;font-style:italic}   /* slate — comments */
+.py .py-decorator{color:#f0abfc;font-weight:500}     /* magenta — @ */
+.py-fallback{border-left:3px solid var(--bad)}
+
+/* Help bar */
+.helpbar{
+  position:fixed;bottom:1.3rem;left:50%;transform:translateX(-50%);
+  background:var(--ink);color:#e2e8f0;
+  border:1px solid #1e293b;
+  padding:.55rem 1.15rem;border-radius:999px;
+  font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;
+  display:none;align-items:center;gap:.6rem;
+  box-shadow:0 8px 30px rgba(0,0,0,.18);
+  z-index:40}
+.helpbar.on{display:flex;animation:fade .25s ease-out both}
+.helpbar kbd{
+  background:#1e293b;border:1px solid #334155;border-radius:3px;
+  padding:.1rem .4rem;font-family:var(--mono);font-size:.7rem;
+  color:#e2e8f0}
+
+
+/* ─────────── [5] LANDING page ─────────── */
+
+.layout{
+  display:grid;grid-template-columns:420px 1fr;gap:1.85rem;
+  margin-top:1.85rem}
+@media (max-width:880px){.layout{grid-template-columns:1fr}}
+
+
+/* ─── Landing-page layout ────────────────────────────────────────
+ *
+ * Behaviour user wants:
+ * - LEFT panel (form): show in full, NO scrollbar. Page can grow
+ *   as tall as the form needs.
+ * - RIGHT panel (runs): same height as LEFT. If the run list is
+ *   taller than that, the list scrolls INTERNALLY (vertical
+ *   scrollbar inside the panel) — page itself stays the form's
+ *   height.
+ * - Bigger overall: container widened 1180→1380px so cards have
+ *   room for the status pill without clipping.
+ *
+ * Implementation: NO viewport-lock (was clipping the form bottom
+ * out of reach). Grid `align-items: start` so neither panel
+ * auto-stretches. JS (`setupRunsPanelHeightSync` in workspace.js)
+ * observes the left panel's height and pins the right panel's
+ * max-height to match. The right panel content (`ul.run-list`)
+ * has `overflow-y: auto; overflow-x: hidden` so a tall list
+ * scrolls vertically inside; horizontal accidents are clipped.
+ */
+body.is-landing > .container{
+  max-width:1380px}
+body.is-landing .layout{align-items:start}
+
+/* Right panel: bounded vertically by its own max-height (set by
+   JS to match the left panel). Establishes a flex column so the
+   inner `ul.run-list` can claim `flex:1` and scroll internally. */
+body.is-landing .layout > section.panel.run-panel{
+  display:flex;flex-direction:column;
+  min-height:0;overflow:hidden}
+body.is-landing .layout > section.panel.run-panel > h2{flex:0 0 auto}
+body.is-landing .layout > section.panel.run-panel > ul.run-list{
+  flex:1;min-height:0;
+  overflow-y:auto;overflow-x:hidden}
+
+section.panel{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:1.65rem 1.75rem;
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  transition:box-shadow .18s ease}
+section.panel:hover{box-shadow:var(--shadow-md)}
+
+/* Section title with editorial-tech chrome:
+       01 / NEW RUN
+       02 / RUNS · N=1
+   "01 /" is small mono teal; "NEW RUN" is sans uppercase tracked
+   in slightly-darker ink. The two parts read as a coordinate-axis
+   label — a chart-page touch without going gimmicky. */
+section.panel h2{
+  margin:0 0 1.4rem;
+  font-family:var(--mono);
+  font-size:.78rem;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-2);line-height:1;
+  padding-bottom:1rem;
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:baseline;gap:.55rem}
+section.panel h2::before{
+  font-family:var(--mono);color:var(--accent);
+  font-weight:600;letter-spacing:.16em}
+section.panel:nth-of-type(1) h2::before{content:'01 /'}
+section.panel:nth-of-type(2) h2::before{content:'02 /'}
+section.panel h2 .muted{
+  font-family:var(--mono);font-size:.72rem;
+  font-weight:400;letter-spacing:.10em;
+  color:var(--muted);margin-left:auto;text-transform:none}
+
+/* Form. Sentence-case labels — chrome is at the section level,
+   form fields stay readable. */
+.run-form{display:flex;flex-direction:column;gap:1.05rem}
+.run-form label{
+  display:flex;flex-direction:column;gap:.4rem;
+  font-family:var(--sans);
+  font-size:.86rem;font-weight:500;color:var(--ink-2);
+  letter-spacing:0;text-transform:none}
+.run-form label .hint{
+  font-weight:400;color:var(--muted);font-size:.78rem;
+  letter-spacing:0;text-transform:none}
+
+.run-form input[type=text],
+.run-form input[type=number],
+.run-form textarea{
+  font-family:var(--sans);font-size:.92rem;font-weight:400;
+  padding:.65rem .8rem;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:6px;
+  color:var(--ink);width:100%;line-height:1.5;
+  transition:border-color .16s ease,box-shadow .16s ease}
+.run-form input[type=text]::placeholder,
+.run-form input[type=number]::placeholder,
+.run-form textarea::placeholder{
+  color:var(--muted-2)}
+.run-form input[type=text]:focus,
+.run-form input[type=number]:focus,
+.run-form textarea:focus{
+  outline:0;border-color:var(--accent);
+  box-shadow:0 0 0 4px var(--accent-glow)}
+.run-form textarea{resize:vertical;min-height:6rem;line-height:1.6}
+
+/* Drop-zone for reference + data inputs. The native <input type=file>
+   stays in DOM (form-submission source of truth) but is visually
+   hidden; the .dropzone wrapper takes over the styling and accepts
+   click / paste / drag-drop. workspace.js mirrors paste & drop into
+   the input via DataTransfer. */
+.input-zone{
+  display:flex;flex-direction:column;gap:.4rem;
+  font-family:var(--sans)}
+.input-zone-label{
+  font-size:.86rem;font-weight:500;color:var(--ink-2);
+  letter-spacing:0;text-transform:none}
+.input-zone-label .hint{
+  font-weight:400;color:var(--muted);font-size:.78rem}
+
+.dropzone{
+  position:relative;
+  background:var(--bg-deep);
+  border:1px dashed var(--line-2);border-radius:8px;
+  padding:1rem 1.1rem;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,
+    box-shadow .16s ease}
+.dropzone:hover{
+  border-color:var(--accent-line);background:var(--accent-soft)}
+.dropzone:focus,
+.dropzone:focus-within{
+  outline:0;border-color:var(--accent);border-style:solid;
+  box-shadow:0 0 0 4px var(--accent-glow)}
+.dropzone.is-dragging{
+  border-color:var(--accent);border-style:solid;
+  background:var(--accent-soft);
+  box-shadow:0 0 0 4px var(--accent-glow)}
+.dropzone.has-error{
+  border-color:var(--bad-line);background:var(--bad-bg);
+  animation:shake .35s ease}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-3px)}
+  75%{transform:translateX(3px)}
+}
+
+/* Native input visually hidden but still in tab order + form payload.
+   Avoid display:none — that excludes from form submission on some
+   browsers. */
+.dropzone-input{
+  position:absolute;width:1px;height:1px;
+  margin:-1px;padding:0;border:0;
+  overflow:hidden;clip:rect(0 0 0 0);
+  white-space:nowrap}
+
+.dropzone-hint{
+  display:flex;align-items:center;gap:.7rem;
+  color:var(--muted);
+  font-family:var(--sans);font-size:.86rem;
+  pointer-events:none}
+.dropzone-hint .muted{color:var(--muted-2);font-size:.78rem}
+.dropzone-icon{
+  flex:none;
+  width:32px;height:32px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:6px;
+  font-size:1rem;color:var(--accent);
+  font-family:var(--mono);font-weight:600}
+.dropzone-text{flex:1;line-height:1.45}
+
+/* Image preview state */
+.dropzone-preview{
+  display:flex;align-items:center;gap:.85rem;
+  position:relative}
+.dropzone-img{
+  max-width:140px;max-height:90px;
+  border-radius:4px;
+  border:1px solid var(--line);
+  background:#fff;
+  object-fit:contain}
+
+/* Data fingerprint state */
+.dropzone-preview-data{
+  flex-direction:column;align-items:stretch;gap:.55rem}
+.fingerprint{
+  display:grid;grid-template-columns:repeat(3,auto);
+  gap:.4rem .9rem;
+  font-family:var(--mono);font-size:.72rem;
+  color:var(--ink-2);letter-spacing:.02em}
+.fp-row{display:flex;align-items:baseline;gap:.45rem}
+.fp-label{
+  color:var(--muted);text-transform:uppercase;
+  letter-spacing:.1em;font-size:.66rem}
+.fp-val{
+  color:var(--ink);font-weight:500;
+  font-feature-settings:'tnum' 1}
+.fp-preview{
+  margin:0;padding:.65rem .8rem;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:5px;
+  font-family:var(--mono);font-size:.72rem;
+  color:var(--ink-2);line-height:1.55;
+  max-height:5.5em;overflow:hidden;
+  white-space:pre;
+  /* Truncate-to-3-lines feel — fade out the bottom edge. */
+  mask-image:linear-gradient(180deg,#000 70%,transparent 100%);
+  -webkit-mask-image:linear-gradient(180deg,#000 70%,transparent 100%)}
+
+.dropzone-clear{
+  position:absolute;top:0;right:0;
+  width:24px;height:24px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:50%;
+  color:var(--muted);font-size:.95rem;line-height:1;
+  cursor:pointer;
+  transition:color .12s ease,border-color .12s ease,
+    background .12s ease}
+.dropzone-clear:hover{
+  color:var(--bad);border-color:var(--bad-line);
+  background:var(--bad-bg)}
+.dropzone-clear:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+.run-form .row{
+  display:grid;grid-template-columns:1fr auto;gap:1rem;
+  align-items:end}
+
+/* form-field: wrapper for a standalone <label> + an input/control
+   row (used by the iters-row block). Mirrors the implicit layout of
+   `.run-form label` (label-text-on-top, input-below) but uses a real
+   block instead of a nested-label structure so we can put a
+   horizontal `.iters-row` underneath. */
+.run-form .form-field{
+  display:flex;flex-direction:column;gap:.4rem;
+  font-family:var(--sans);
+  font-size:.86rem;font-weight:500;color:var(--ink-2);
+  letter-spacing:0;text-transform:none}
+.run-form .form-field > label{
+  /* The standalone label inside form-field is just a one-line text
+     anchor for `for=`; reset the parent's flex-column treatment so
+     it doesn't drag in unwanted spacing. */
+  display:inline-block;font-weight:500;color:var(--ink-2)}
+
+/* iters-row: the input + auto checkbox in one flex strip so they
+   share a baseline. Replaces the previous .row two-column grid which
+   left the checkbox label visually floating above the input field
+   (different label-vs-input heights → end-alignment landed at
+   different y-coords). */
+.run-form .iters-row{
+  display:flex;align-items:center;gap:1rem;
+  margin-top:.3rem}
+.run-form .iters-row input[type=number]{flex:0 0 auto;width:auto}
+
+.run-form .checkbox{
+  font-family:var(--sans);font-size:.86rem;font-weight:500;
+  color:var(--ink-2);
+  cursor:pointer;display:inline-flex;
+  flex-direction:row;align-items:center;gap:.5rem;
+  letter-spacing:0;text-transform:none}
+.run-form .checkbox input{
+  width:14px;height:14px;margin:0;
+  accent-color:var(--accent)}
+
+/* Backend select dropdown — same visual register as the number/text
+   inputs above so the form reads as one consistent control set. */
+.run-form select.run-backend{
+  font-family:var(--sans);font-size:.92rem;font-weight:400;
+  padding:.6rem .8rem;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:5px;
+  color:var(--ink);
+  cursor:pointer;
+  appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--ink-2) 50%),
+                   linear-gradient(135deg,var(--ink-2) 50%,transparent 50%);
+  background-position:calc(100% - 16px) calc(.65rem + 4px),
+                      calc(100% - 11px) calc(.65rem + 4px);
+  background-size:5px 5px,5px 5px;
+  background-repeat:no-repeat;
+  padding-right:2rem}
+.run-form select.run-backend:focus{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+/* Mutual-exclusion visual: when `auto` is checked, JS sets `disabled`
+   on the max_iters input. Style mirrors that with desaturated colors
+   + not-allowed cursor so the user reads the field as "off". */
+.run-form .iters-row input[type=number]:disabled{
+  background:var(--bg-deep);
+  color:var(--muted);
+  border-color:var(--line);
+  cursor:not-allowed;
+  opacity:.6}
+.run-form .iters-row input[type=number]:disabled + .checkbox,
+.run-form .iters-row.is-auto label[for='run-max-iters']{
+  /* (selectors reserved for future per-label graying if needed) */
+}
+
+/* Submit — solid teal, lifts on hover with subtle shadow growth.
+   No outline-to-fill toggling (cleaner than the dark version). */
+.run-form .submit{
+  margin-top:.6rem;padding:.75rem 1.4rem;
+  background:var(--accent);color:#fff;
+  border:0;border-radius:6px;
+  font-family:var(--sans);font-size:.92rem;font-weight:600;
+  letter-spacing:-.005em;
+  cursor:pointer;
+  box-shadow:var(--shadow-sm),
+    inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .16s ease,box-shadow .18s ease,
+    transform .08s ease}
+.run-form .submit:hover{
+  background:var(--accent-2);
+  box-shadow:var(--shadow-md),
+    0 0 0 4px var(--accent-glow),
+    inset 0 1px 0 rgba(255,255,255,.18)}
+.run-form .submit:active{transform:translateY(1px)}
+.run-form .submit:disabled{
+  background:var(--muted-2);cursor:not-allowed;
+  box-shadow:none;transform:none}
+
+.run-form .stub-note{
+  font-family:var(--mono);font-size:.72rem;
+  color:var(--muted);letter-spacing:.04em;line-height:1.6;
+  text-align:center;padding:.75rem .9rem;
+  background:var(--bg-deep);border-radius:6px;
+  border:1px dashed var(--line-2)}
+
+/* Run-bar — each entry on the right panel of the WorkPanel is a
+   long bar with: thumbnail (80×60) | name + iter meta | status pill.
+   Hover slides a 3px teal bar in from the left and lifts the row. */
+.run-list{
+  list-style:none;padding:0;margin:0;
+  display:flex;flex-direction:column;gap:.6rem}
+.run-list[data-empty='1']{display:none}
+
+.run-bar{
+  display:grid;
+  /* 3 columns: thumb | body | status pill. The delete button
+     (.run-bar-delete) is OUTSIDE this grid via position:absolute
+     so adding/removing it doesn't reflow row content (which was
+     clipping the status pill against the card's right edge when
+     a 4th grid column got added).
+
+     `minmax(0,1fr)` (not bare `1fr`) on the body column: a bare
+     `1fr` implicitly resolves to `minmax(auto,1fr)`, where `auto`
+     means the column WILL NOT shrink below its content's
+     min-content size. Long run names like
+     `run_20260513_003017` then force the body column wider than
+     available, pushing the `auto` (pill) column past the card's
+     right edge — `overflow: hidden` on `.run-bar` then clips the
+     pill text. With `minmax(0,1fr)` the body track can shrink
+     to zero so the name's `text-overflow: ellipsis` kicks in
+     and the pill always fits. */
+  grid-template-columns:80px minmax(0,1fr) auto;
+  align-items:center;gap:1rem;
+  padding:.65rem .9rem .65rem .65rem;
+  background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;
+  position:relative;overflow:hidden;
+  box-shadow:var(--shadow-sm);
+  transition:background .14s ease,border-color .14s ease,
+    box-shadow .18s ease,transform .14s ease}
+.run-bar::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--accent);
+  transform:translateX(-3px);
+  transition:transform .18s ease}
+.run-bar:hover{
+  border-color:var(--accent-line);
+  box-shadow:var(--shadow-md);
+  transform:translateX(2px)}
+.run-bar:hover::before{transform:translateX(0)}
+
+.run-bar-thumb{
+  width:80px;height:60px;flex:none;
+  display:block;
+  background:var(--bg-deep);
+  border:1px solid var(--line);border-radius:5px;
+  overflow:hidden;
+  text-decoration:none}
+.run-bar-thumb img{
+  width:100%;height:100%;
+  object-fit:contain;
+  display:block;background:#fff}
+.run-bar-thumb-empty{
+  position:relative;
+  display:grid;
+  place-items:center;
+  background:var(--bg-deep);
+  background-image:
+    repeating-linear-gradient(
+      45deg,transparent 0 5px,
+      rgba(13,148,136,.06) 5px 10px)}
+.run-bar-thumb-loading,
+li.run-bar[data-status="running"] .run-bar-thumb-empty{
+  background:
+    radial-gradient(circle at 50% 50%,rgba(13,148,136,.10),transparent 58%),
+    repeating-linear-gradient(
+      45deg,transparent 0 5px,
+      rgba(13,148,136,.06) 5px 10px),
+    var(--bg-deep)}
+.run-bar-thumb-loading::before,
+li.run-bar[data-status="running"] .run-bar-thumb-empty::before{
+  content:'';
+  width:1.45rem;height:1.45rem;
+  border:3px solid rgba(13,148,136,.18);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .9s linear infinite}
+.run-bar-thumb-loading::after,
+li.run-bar[data-status="running"] .run-bar-thumb-empty::after{
+  content:'waiting';
+  position:absolute;left:50%;bottom:.45rem;
+  transform:translateX(-50%);
+  font-family:var(--mono);font-size:.58rem;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-2)}
+.run-bar-thumb-failed,
+li.run-bar[data-status="failed"] .run-bar-thumb-empty{
+  background:
+    repeating-linear-gradient(
+      45deg,transparent 0 5px,
+      rgba(220,38,38,.06) 5px 10px),
+    #fff5f5;
+  border-color:#fecaca}
+.run-bar-thumb-failed::before,
+li.run-bar[data-status="failed"] .run-bar-thumb-empty::before{
+  content:'!';
+  display:grid;place-items:center;
+  width:1.5rem;height:1.5rem;
+  border:2px solid #fca5a5;border-radius:50%;
+  color:#dc2626;font-family:var(--mono);font-weight:700}
+
+.run-bar-body{
+  display:flex;flex-direction:column;gap:.2rem;
+  min-width:0  /* allow text-truncate inside */}
+.run-bar-name-row{
+  display:flex;align-items:center;gap:.5rem;min-width:0}
+
+/* Backend badge — small 2-char tag in front of the run name so the
+   user can tell at a glance which CLI painted each run. Codex uses
+   the teal accent (matches the rest of the app's CTA color);
+   Claude uses an Anthropic-flavored amber. Mock is a neutral grey
+   so dev-mode runs don't compete visually with real ones. */
+.run-backend-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 auto;
+  min-width:1.6rem;height:1.1rem;
+  padding:0 .35rem;
+  border-radius:3px;
+  font-family:var(--mono);font-size:.66rem;font-weight:600;
+  letter-spacing:.04em;text-transform:none;
+  border:1px solid transparent;
+  user-select:none}
+.run-backend-codex{
+  background:rgba(13,148,136,.10);
+  color:#0d9488;
+  border-color:rgba(13,148,136,.30)}
+.run-backend-claude{
+  background:rgba(204,102,51,.10);
+  color:#cc6633;
+  border-color:rgba(204,102,51,.32)}
+.run-backend-mock{
+  background:var(--bg-deep);
+  color:var(--muted);
+  border-color:var(--line)}
+
+.run-bar-name{
+  color:var(--ink);text-decoration:none;
+  font-family:var(--sans);font-weight:600;font-size:.98rem;
+  letter-spacing:-.012em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:1 1 auto;min-width:0}
+
+/* Per-row delete (×) button — hidden until the user hovers the row
+   so the affordance doesn't compete with the row's primary actions
+   (thumb + name link). Absolute-positioned to the row's top-right
+   corner so it doesn't disturb the grid layout (the previous
+   grid-column approach pushed the status pill past the row's
+   right edge — clipped by overflow:hidden). */
+.run-bar-delete{
+  position:absolute;top:.5rem;right:.5rem;z-index:2;
+  width:1.5rem;height:1.5rem;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--surface);
+  border:1px solid transparent;border-radius:4px;
+  color:var(--muted);
+  font-family:var(--sans);font-size:1.05rem;line-height:1;font-weight:400;
+  cursor:pointer;
+  opacity:0;transition:opacity .12s ease,background .12s ease,
+                     color .12s ease,border-color .12s ease}
+.run-bar:hover .run-bar-delete,
+.run-bar:focus-within .run-bar-delete{opacity:1}
+.run-bar-delete:hover{
+  background:rgba(220,38,38,.10);
+  color:#dc2626;
+  border-color:rgba(220,38,38,.30)}
+.run-bar-delete:focus-visible{
+  opacity:1;outline:2px solid #dc2626;outline-offset:1px}
+.run-bar-delete:disabled{cursor:not-allowed}
+
+/* Deleting-state on the row: dim + de-interact while DELETE in
+   flight, so a double-click can't double-fire and the user gets
+   a visual cue something is happening. */
+.run-bar.run-bar-deleting{
+  opacity:.45;pointer-events:none;
+  transition:opacity .12s ease}
+
+/* Header "Delete run" button on the trajectory page. Sits at the
+   right edge of header-chrome. Same destructive visual language as
+   the row × but full-text label since users on the trajectory page
+   have more room and we want the action to be unambiguous. */
+.run-delete{
+  margin-left:auto;
+  padding:.32rem .7rem;
+  background:transparent;
+  border:1px solid var(--line);border-radius:5px;
+  color:var(--muted);
+  font-family:var(--sans);font-size:.78rem;font-weight:500;
+  letter-spacing:0;text-transform:none;
+  cursor:pointer;
+  transition:background .12s ease,color .12s ease,
+             border-color .12s ease}
+.run-delete:hover{
+  background:rgba(220,38,38,.08);
+  color:#dc2626;
+  border-color:rgba(220,38,38,.30)}
+.run-delete:focus-visible{
+  outline:2px solid #dc2626;outline-offset:2px}
+.run-delete:disabled{
+  cursor:not-allowed;opacity:.6}
+.run-bar-name:hover{color:var(--accent-2)}
+.run-bar-name:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+  border-radius:3px}
+.run-bar-meta{
+  font-family:var(--mono);font-size:.72rem;
+  color:var(--muted);letter-spacing:.04em}
+
+.run-bar-status{flex:none}
+.run-bar-status .pill{
+  font-family:var(--mono);font-size:.66rem;
+  font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+  padding:.22rem .6rem;border-radius:3px;
+  border:1px solid transparent}
+.run-bar-status .pill.good{
+  background:var(--good-bg);color:var(--good);
+  border-color:var(--good-line)}
+.run-bar-status .pill.bad{
+  background:var(--bad-bg);color:var(--bad);
+  border-color:var(--bad-line)}
+.run-bar-status .pill.neutral{
+  background:var(--neutral-bg);color:var(--neutral);
+  border-color:var(--neutral-line)}
+.run-bar-status .pill.mute{
+  background:#f1f3f5;color:var(--muted);
+  border-color:var(--line)}
+
+.empty{
+  font-family:var(--mono);color:var(--muted);
+  font-size:.82rem;letter-spacing:.04em;
+  text-align:center;padding:3rem 1rem;
+  background:var(--bg-deep);
+  border:1px dashed var(--line-2);border-radius:8px;
+  line-height:1.6}
+
+
+/* ─────────── [6] MOTION ─────────── */
+
+@keyframes fade{
+  from{opacity:0}
+  to{opacity:1}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Page-load stagger: header → form panel → list panel.
+   Snappy total ~440ms. */
+header.top{animation:fade .35s ease-out both}
+.container > .layout > section.panel:nth-of-type(1){
+  animation:fadeUp .42s .07s ease-out both}
+.container > .layout > section.panel:nth-of-type(2){
+  animation:fadeUp .42s .14s ease-out both}
+
+/* Trajectory page: stagger nav.toc + cards on load. */
+.container > nav.toc{animation:fadeUp .38s .05s ease-out both}
+.container > section.card{animation:fadeUp .42s ease-out both}
+.container > section.card:nth-of-type(1){animation-delay:.10s}
+.container > section.card:nth-of-type(2){animation-delay:.16s}
+.container > section.card:nth-of-type(3){animation-delay:.22s}
+.container > section.card:nth-of-type(4){animation-delay:.28s}
+.container > section.card:nth-of-type(n+5){animation-delay:.32s}
+
+/* ─── new-run-form async submit feedback ─────────────────────── */
+/* Inline status banner above the submit button. Hidden by default;
+   workspace.js toggles it after submit. */
+.run-form-status{
+  margin:.4rem 0 .2rem;
+  padding:.5rem .7rem;
+  font-family:var(--mono);font-size:.78rem;
+  color:var(--accent-2);
+  background:rgba(13,148,136,.07);
+  border:1px solid rgba(13,148,136,.18);
+  border-radius:5px;
+  animation:fade .18s ease-out both}
+.run-form-status-err{
+  color:#9a2222;
+  background:rgba(220,38,38,.07);
+  border-color:rgba(220,38,38,.22)}
+
+/* Brief flash on the freshly-added run card so the user can see
+   where their just-submitted run landed in the list. */
+@keyframes runJustAddedFlash{
+  0%  {background:rgba(13,148,136,.18);
+       box-shadow:0 0 0 3px rgba(13,148,136,.22), var(--shadow-md)}
+  100%{background:var(--surface);
+       box-shadow:var(--shadow-sm)}
+}
+li.run-bar[data-just-added]{
+  animation:runJustAddedFlash 1.6s ease-out both}
+
+/* ─── 'running' spinner on the run card ─────────────────────────
+ * When a run is mid-loop (status=running) the meta line gets a
+ * tiny inline spinner so the card visibly indicates progress —
+ * fixes the "card looks broken / nothing happening" feedback. */
+@keyframes spin{ to{ transform:rotate(360deg) } }
+li.run-bar[data-status="running"] .run-bar-meta::before{
+  content:'';display:inline-block;
+  width:.7em;height:.7em;
+  margin-right:.45em;vertical-align:-.08em;
+  border:2px solid rgba(13,148,136,.22);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .9s linear infinite}
+
+/* Inside the run page: when no iters have landed yet, show a
+ * stand-in 'rendering iter 1…' card so the page doesn't look
+ * empty / broken before the first PNG drops. The .iter-strip-section
+ * is rendered as-usual when iters exist; this block is a separate
+ * id #iter-strip-pending. */
+.iter-strip-pending{
+  display:flex;align-items:center;gap:1rem;
+  padding:1rem 1.2rem;
+  background:var(--surface);
+  border:1px dashed var(--accent-line);
+  border-radius:8px;
+  margin:1rem 0;
+  color:var(--muted);
+  font-family:var(--mono);font-size:.85rem;
+  animation:fade .25s ease-out both}
+.iter-strip-pending-spinner{
+  width:1.6em;height:1.6em;flex:none;
+  border:2.5px solid rgba(13,148,136,.18);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .9s linear infinite}
+.iter-strip-pending-body{display:flex;flex-direction:column;gap:.18rem}
+.iter-strip-pending-headline{
+  color:var(--ink);font-weight:600;font-size:.92rem;
+  letter-spacing:-.01em}
+.iter-strip-pending-hint{
+  font-size:.76rem;letter-spacing:.02em}
+
+/* Reduced motion: respect user preference. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}

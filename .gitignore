@@ -1,0 +1,166 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Package managers
+pip-log.txt
+pip-delete-this-directory.txt
+.uv-cache/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---- Frontend (for later) ----
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+out/
+build/
+.vite/
+.parcel-cache/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Data / models / caches ----
+# (per global rule: large artifacts should NOT live in repo anyway,
+#  but ignore the common project-local symlink targets just in case)
+data/
+data_local/
+cache/
+results/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.onnx
+*.h5
+*.parquet
+*.feather
+hf_cache/
+torch_hub/
+# `_uv_env()` in figcopy_runner/{codex,claude}.py defaults
+# UV_CACHE_DIR to <repo>/.artifacts/uv-cache so first-use `uv run`
+# installs (matplotlib/numpy/pillow wheels — hundreds of MB) land in
+# a known per-repo location instead of bloating $HOME/.cache. Must
+# be gitignored or committers risk accidentally committing wheels.
+.artifacts/
+
+# ---- Secrets / env ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Spike run outputs ----
+# Per-spike run artifacts (figures, audits, iter sources, audit-view staging) are
+# ephemeral — they're produced fresh by every spike and bloat the repo. The
+# canonical prompts live in resources/prompts/; the prompt-iteration history
+# stays under spike-results/prompts/ (tracked, small).
+spike-results/claude-code-*/
+spike-results/codex-*/
+
+# Stray spike outputs that occasionally land at the repo root when an iter
+# script chdir's wrong:
+/img_iter*.png
+/figure_iter*.py
+/figure_iter*.pdf
+/floor_selfcheck_iter*.txt
+/audit_iter*.json
+/audit_iter*.stderr
+/notes_iter*.md
+
+# ---- Misc tool markers ----
+# Ignore Codex runtime state but track project-level skill and context files.
+.codex/cache
+.codex/sessions
+.codex/ambient-suggestions
+.codex/archived_sessions
+.codex/logs_2.sqlite*
+.codex/state_5.sqlite*
+.codex/session_index.jsonl
+.codex/models_cache.json
+.codex/installation_id
+.codex/auth.json
+.codex/tmp
+.codex/vendor_imports
+.codex/memories
+.codex/sqlite
+.codex/shell_snapshots
+
+# ---- FigMirror skill workspace ----
+# Per-run output directories (each run produces ~10-30 MB of iter
+# artifacts, audit JSONs, intermediate renders). Workspaces are
+# user-machine-local; we don't publish them.
+.claude/skills/figmirror-workspace/
+figmirror-runs/
+figure-style-copier-runs/
+resources/figure-references/
+tools/figcopy_serve*.html
+tools/figcopy_serve_demo_workdir/
+openspec/changes/stage1-edge-stress-and-ux-polish/

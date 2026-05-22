@@ -1,0 +1,23 @@
+{
+  "fidelity": {
+    "verdict": "off"
+  },
+  "quality_floor": {
+    "passed": false,
+    "violation_kinds": [
+      "default-mpl-aesthetic",
+      "spine-default"
+    ]
+  },
+  "anchor": {
+    "what_is_right": [
+      "[L1] x-axis label position",
+      "[L1] line plot kind"
+    ]
+  },
+  "focus_themes": [
+    "palette: red/green/blue is colorblind-hostile; sample reference's blue/orange/green",
+    "spines: default 4-side mpl box; reference shows L+B only with hairline",
+    "title style: reference uses small subtitle, not bold large"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "fidelity": {
+    "verdict": "close"
+  },
+  "quality_floor": {
+    "passed": true
+  },
+  "anchor": {
+    "what_is_right": [
+      "[L1] palette now matches reference within \u0394E < 5",
+      "[L2] spines reduced to L+B only",
+      "[L1] axis labels position",
+      "[L1] line plot kind"
+    ]
+  },
+  "focus_themes": [
+    "tick density: reference uses 6 major ticks, we have ~10",
+    "marker size: reference markers slightly larger (~6pt vs our 5pt)"
+  ]
+}

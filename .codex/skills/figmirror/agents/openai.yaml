@@ -1,0 +1,4 @@
+interface:
+  display_name: "FigMirror"
+  short_description: "Copy paper-figure style onto data"
+  default_prompt: "Use $figmirror to mirror my reference figure's style onto my data as a camera-ready matplotlib figure."
