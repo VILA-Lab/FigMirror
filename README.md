@@ -27,6 +27,10 @@
 </p>
 
 <p align="center">
+  <b>English</b> | <a href="README.zh-CN.md">中文</a>
+</p>
+
+<p align="center">
   <video src="https://github.com/user-attachments/assets/0656009c-77c7-41e5-8423-07c3411aef13" width="900" controls
   muted playsinline></video>
 </p>
