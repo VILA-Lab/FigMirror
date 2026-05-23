@@ -16,6 +16,7 @@
   <a href="#codex-skill"><img alt="Codex skill" src="docs/assets/badges/codex.svg"></a>
   <a href="#claude-code-skill"><img alt="Claude Code skill" src="https://img.shields.io/badge/Claude%20Code-skill-d97706?style=flat&logo=anthropic&logoColor=white"></a>
   <a href="https://huggingface.co/spaces/zcahjl3/figcopy-taxonomy-gallery"><img alt="FigMirror gallery" src="https://img.shields.io/badge/Gallery-139%20figures-f59e0b?style=flat&logo=huggingface&logoColor=white"></a>
+  <a href="docs/contributing.md"><img alt="Contributions welcome" src="https://img.shields.io/badge/Contributions-welcome-22c55e?style=flat&logo=github&logoColor=white"></a>
 </p>
 
 <p align="center">
@@ -132,6 +133,8 @@ For the detailed algorithm, architecture, product envelope, and spec map, read [
 <h2 id="contributing"><img src="docs/assets/icons/contributing.svg" alt="" width="22" height="22" align="absmiddle"> Contributing</h2>
 
 FigMirror welcomes contributions!
+
+Open an issue for bugs, broken installs, or figure cases FigMirror should learn from; open a PR for showcase examples, prompt improvements, UI polish, or small regression tests.
 
 - **Showcase cases:** add reference/output pairs that prove the method across chart families.
 - **UI polish:** make the web workflow feel instant, legible, and forgiving.

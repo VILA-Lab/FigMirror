@@ -16,6 +16,7 @@
   <a href="#codex-skill"><img alt="Codex skill" src="docs/assets/badges/codex.svg"></a>
   <a href="#claude-code-skill"><img alt="Claude Code skill" src="https://img.shields.io/badge/Claude%20Code-skill-d97706?style=flat&logo=anthropic&logoColor=white"></a>
   <a href="https://huggingface.co/spaces/zcahjl3/figcopy-taxonomy-gallery"><img alt="FigMirror gallery" src="https://img.shields.io/badge/Gallery-139%20figures-f59e0b?style=flat&logo=huggingface&logoColor=white"></a>
+  <a href="docs/contributing.md"><img alt="Contributions welcome" src="https://img.shields.io/badge/Contributions-welcome-22c55e?style=flat&logo=github&logoColor=white"></a>
 </p>
 
 <p align="center">
@@ -132,6 +133,8 @@ FigMirror 使用 agentic Drawer-Reviewer 循环。Drawer 先画出候选图，�
 <h2 id="contributing"><img src="docs/assets/icons/contributing.svg" alt="" width="22" height="22" align="absmiddle"> 贡献</h2>
 
 欢迎给 FigMirror 做贡献！
+
+如果遇到安装问题、bug，或者有希望 FigMirror 学会的图表 case，可以开 issue；如果想贡献 showcase、prompt 改进、UI polish 或小型回归测试，可以直接开 PR。
 
 - **Showcase cases:** 添加 reference/output 对，展示 FigMirror 覆盖更多图表家族的能力。
 - **UI polish:** 让 Web 流程更快、更清楚、更容易恢复。
