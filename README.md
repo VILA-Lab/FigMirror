@@ -23,6 +23,7 @@
   <a href="#showcase">Showcase</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#how-it-works">How It Works</a> |
+  <a href="#star-history">Star History</a> |
   <a href="docs/method.md">Method</a> |
   <a href="docs/contributing.md">Contribute</a>
 </p>
@@ -142,6 +143,18 @@ Open an issue for bugs, broken installs, or figure cases FigMirror should learn 
 - **Evaluation:** add reproducible cases that catch visual drift, floor violations, and broken exports.
 
 Start with [docs/contributing.md](docs/contributing.md). Good first PRs include adding a showcase example, improving a web UI interaction, tightening install docs, or adding a small regression test around runner behavior.
+
+<h2 id="star-history"><img src="docs/assets/icons/star-history.svg" alt="" width="22" height="22" align="absmiddle"> Star History</h2>
+
+<p align="center">
+  <a href="https://star-history.com/#vila-lab/figmirror&Date">
+    <img alt="FigMirror GitHub star history chart" src="https://api.star-history.com/svg?repos=vila-lab/figmirror&type=Date" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <sub>Rendered by Star History from GitHub stargazer data, so the chart stays current as the repository grows.</sub>
+</p>
 
 <h2 id="roadmap"><img src="docs/assets/icons/roadmap.svg" alt="" width="22" height="22" align="absmiddle"> Roadmap</h2>
 

@@ -23,6 +23,7 @@
   <a href="#showcase">展示</a> |
   <a href="#quick-start">快速开始</a> |
   <a href="#how-it-works">工作原理</a> |
+  <a href="#star-history">Star 趋势</a> |
   <a href="docs/method.md">Method</a> |
   <a href="docs/contributing.md">Contribute</a>
 </p>
@@ -142,6 +143,18 @@ FigMirror 使用 agentic Drawer-Reviewer 循环。Drawer 先画出候选图，�
 - **Evaluation:** 添加可复现的 cases，用来发现 visual drift、floor violations 和 broken exports。
 
 从 [docs/contributing.md](docs/contributing.md) 开始。适合入门的 PR 包括：添加一个 showcase example，改进一个 Web UI 交互，收紧安装文档，或者给 runner behavior 加一个小回归测试。
+
+<h2 id="star-history"><img src="docs/assets/icons/star-history.svg" alt="" width="22" height="22" align="absmiddle"> Star 趋势</h2>
+
+<p align="center">
+  <a href="https://star-history.com/#vila-lab/figmirror&Date">
+    <img alt="FigMirror GitHub star history chart" src="https://api.star-history.com/svg?repos=vila-lab/figmirror&type=Date" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <sub>图表由 Star History 基于 GitHub stargazer 数据动态渲染，会随着仓库增长持续更新。</sub>
+</p>
 
 <h2 id="roadmap"><img src="docs/assets/icons/roadmap.svg" alt="" width="22" height="22" align="absmiddle"> Roadmap</h2>
 
