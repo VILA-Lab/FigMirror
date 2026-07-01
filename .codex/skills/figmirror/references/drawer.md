@@ -23,6 +23,9 @@ quality floor holds:
    sits directly on top of its tick text.
 2. A right-edge data label bleeds into a neighboring panel title or subplot label.
 3. A bottom-row xlabel, tick label, or axis label clips off the canvas.
+4. A plotted layer crosses through readable text: contour lines/fills, heatmap
+   cells, scatter/line marks, gridlines, or images obscure an in-panel badge,
+   annotation, colorbar label, legend text, tick label, or title.
 
 **Failure mode 2 — monotonic drift on measured properties.** Observed failure:
 a draft measured the reference aspect ratio at 1.95 in iter 0, then later
@@ -54,7 +57,13 @@ diverge. Defeat both.
   run. Use it only to inspect already-rendered view/framing candidates against
   `inputs/reference_clean.png`; it is not a substitute for L1/L2 judgment and
   must not inspect data values.
-- A working directory you own; you may write any auxiliary `.py` files there.
+- For `N > 0`, prior annotated visual feedback:
+  `audit_view_<N-1>/annotated.png` and `audit_view_<N-1>/notes.md`. The image is
+  a reference|draft composite with numbered boxes on the draft side; the notes
+  map each number to the mismatch the Reviewer wants fixed.
+- A working directory you own. You may write narrowly scoped helper files there,
+  but each invocation is a bounded production pass, not an exploratory notebook:
+  before you return, the four required iteration artifacts must exist.
 
 ## What you produce, per iteration
 
@@ -63,6 +72,7 @@ diverge. Defeat both.
 - `img_iter<N>.png` — what that script renders.
 - A short `notes_iter<N>.md` (≤ 25 lines) listing what you changed since the previous
   iter and why.
+- `floor_selfcheck_iter<N>.txt` — deterministic local floor checks and pass/fail.
 
 ## Layout invariants (the quality floor — the Reviewer will check these)
 
@@ -83,6 +93,15 @@ the result within the L2 spacing class when possible.
 NEVER let `set_xlabel(...)` clip off the bottom of the canvas.
 INSTEAD: leave `bottom ≥ 0.14` of figure height; AFTER drawing, verify with
 `ax.xaxis.label.get_window_extent(renderer)` that `y0 ≥ 0`.
+
+NEVER let plotted marks or contour/image layers sit above text.
+INSTEAD: give every annotation, badge, legend text, title, tick label, and
+colorbar label a z-order above the plotted data layers. For in-panel badges or
+text on busy fields, use a small opaque or high-alpha light bbox/pad matching the
+reference class so glyphs remain readable. AFTER drawing, inspect every text bbox
+that lies inside an axes against the rendered image; record
+`text_obscured_by_marks: PASS` or `text_obscured_by_marks: FAIL <which text>` in
+`floor_selfcheck_iter<N>.txt`.
 
 NEVER set a row-level xlabel on a row whose reference axes do not show one.
 INSTEAD: bottom-row only. Top-row axes get `set_xlabel('')` (an empty string), not the
@@ -134,15 +153,28 @@ piece of feedback the Reviewer gives you.
 
 The reference image tells you **what the figure should look like as a category**: the
 typographic voice, the palette warmth, the spine treatment, the gridline weight, the
-marker shape, the legend frame style, the panel grid composition.
+marker shape, the legend frame style, the panel grid composition, AND — most
+load-bearing — the chart type / encoding construction itself plus its signature motifs
+(colorbars, shaded/error bands, streamline fields, insets, stacked offsets).
 
 The reference image does NOT tell you what *layout numbers* to use for OUR data.
-`wspace`, `hspace`, `figsize`, `ylim`, `xytext` offsets, tick padding, font-point sizes
+`wspace`, `hspace`, `figsize`, `ylim`, `xytext` offsets, tick padding, absolute font-point sizes
 — all of these are downstream of OUR data's shape (number of series, range of values,
 density of per-point labels), not the reference's. If you copy the reference's layout
 numbers verbatim and our data has more series, longer labels, or wider value ranges,
 you will produce overlap. Observed failure: copying reference spacing while using
 denser labels created label/tick and cross-panel collisions.
+
+"Layout numbers" means `wspace`/`hspace`/`figsize`/`ylim`/tick padding/font-point sizes
+ONLY. The chart type, colorbars, error/shaded bands, streamline fields, stacked-offset
+construction, inset/twin axes, and the panel-element inventory are NOT layout numbers —
+they are part of the STYLE and must be reproduced, exactly as the palette and spine
+treatment are. "Don't copy the reference's layout numbers" never licenses changing what
+KIND of figure this is. And the RATIO between text elements — how prominent a title is
+over its ticks — is style, not a layout number: measure it from the reference and
+reproduce it as a ratio (the absolute point size still flexes to OUR labels). A reference
+with big bold titles stays big-titled on our data; shrinking the title to fit is the
+failure this guards against.
 
 Concretely:
 - The reference's palette → copy (PIL-sample then assign).
@@ -166,6 +198,17 @@ Reviewer feedback is an independent visual audit, not a matplotlib parameter rec
 When the Reviewer flags spacing, proportion, or bar geometry, translate the visual
 target into code carefully, then render and measure the draft before handoff.
 
+For `N > 0`, start with the prior boxed visual feedback. Open
+`audit_view_<N-1>/annotated.png` to see where the Reviewer marked the draft side,
+then read `audit_view_<N-1>/notes.md` for the numbered action list. Re-check
+those boxed areas before broader polish. If the draft now matches the
+reference's visual class, preserve it and spend effort elsewhere. Repair only
+the unresolved boxed mismatches. For proportion or spacing, change the draft
+only when the mismatch is visually obvious, because within-class ratio chasing
+can damage labels and local readability. If a box conflicts with a stronger
+L1/L2 anchor or prior `anchor.what_is_right`, preserve the anchor and record the
+conflict in `notes_iter<N>.md` under `## Conflict ledger`.
+
 For any repeated-mark or multi-panel figure, measure the visual geometry, not just
 the parameter names. First name the semantic distances that matter in the reference:
 within-unit spacing, between-group spacing, cross-family/divider gaps, panel gutters,
@@ -182,16 +225,38 @@ distances. Record target, method, measured result, and any correction in
 implementation, but the rendered measurement is the authority before Reviewer
 handoff.
 
+When Reviewer feedback targets local layout register, translate it through the
+rendered figure:
+
+- For **axis-side topology** feedback, move the coordinate-bearing elements that
+  carry that role: tick labels, axis labels, tick positions, and visible spine
+  sides when L1 shows them as part of the axis treatment. Keep colorbar axes
+  separate from panel axes. A row-end colorbar on the right is not itself proof
+  that panel y-ticks belong on the right; check the reference side where the
+  coordinate text actually appears. A visible spine or frame is not enough to
+  satisfy this feedback; the rendered tick labels and axis labels must move to
+  the same side class the Reviewer named.
+- For **label-side absence** feedback, preserve blank sides intentionally. If L1
+  leaves the left edge of the leftmost column without y-coordinate text, the
+  draft should not add left-side y-coordinate text merely because matplotlib
+  defaults do.
+- For **whitespace relationship** feedback, adjust visible panel gutters,
+  colorbar pads, and outer margins just enough to restore the relationship to
+  nearby tick-label or axis-label bands. Record the visible target in words,
+  such as "gutter only slightly wider than y-label band," then render and
+  inspect the actual gap against the text band. Keep accepted panel-local shape
+  and contour construction fixed while making this adjustment.
+
 ## Style craft (after the floor holds)
 
 ### Default posture: FIDELITY first, menus second
 
-The user gave you a reference because they want the figure to **look like that
-reference**, not because they want you to interpret. Your default disposition
-is to **preserve** every visible characteristic of the reference — color
-assignments, line treatments, label placements, legend semantics, axis
-decoration, layout density, all of it — even when an L2 menu says some other
-choice would be more "conventional" or "better-looking."
+The user gave you a reference because they want the figure to look like that
+reference, not because they want you to interpret it. So preserve every
+visible characteristic of the reference — color assignments, line treatments,
+label placements, legend semantics, axis decoration, layout density, all of
+it — even when an L2 menu says some other choice would be more "conventional"
+or "better-looking."
 
 Concretely, the precedence inside Style craft is:
 
@@ -202,8 +267,9 @@ Concretely, the precedence inside Style craft is:
    to read the property, the property literally does not appear in the
    reference (because our data has more series, more panels, etc.), or
    PIL-reliability is `❌` so the only honest read is at the class level.
-3. **Never your own taste.** "I think it would look better if…" is L3 and is
-   banned.
+3. **Never your own taste.** "I think it would look better if…" is L3, and the
+   user has asked you not to use it, because they want their reference reproduced
+   rather than reinterpreted.
 
 Common failure modes you must NOT engage in (observed as blocking defects, not
 minor preferences):
@@ -232,10 +298,9 @@ minor preferences):
   numeric tick LABELS carry series color. **Do NOT** color the spine or
   tick marks themselves to match the series.
 
-When you are tempted to deviate from the reference because an L2 menu
-suggests a "better" choice, the answer is no. The user did not ask for
-your improvement; they asked for fidelity. The only legitimate uses of
-the menus below are L1-genuine-ambiguity cases.
+When an L2 menu suggests a "better" choice than what the reference shows,
+stay with the reference, because the user asked for fidelity rather than
+improvement. Reach for the menus below only in L1-genuine-ambiguity cases.
 
 ### L2 menus (use ONLY when L1 is genuinely ambiguous)
 
@@ -272,6 +337,15 @@ them.
 
 ## Workflow per iteration
 
+Every invocation must end with a complete iteration bundle. Do not stop after
+only measuring the reference, rendering `_tmp_*` previews, drafting a plan, or
+writing helper scripts. Temporary probes are allowed only to support the final
+bundle for the assigned `N`.
+
+Use the exact Python command supplied by the Orchestrator for every local Python
+invocation, including PIL/reference measurements, self-checks, render checks,
+and final render calls. Bare `python` and `python3` are invalid in this repo.
+
 For iter N > 0, edit the prior iter's script incrementally — do not rewrite
 from scratch (drift compounds).
 
@@ -297,8 +371,9 @@ from scratch (drift compounds).
 6. **Write** `notes_iter<N>.md`: what changed since N-1, what you sampled, what you
    chose from the menus and why.
 
-For iter 0, skip step 1 (no prior to copy) and run the iter-0 anchor pass
-instead (see "At iter 0, RECORD ANCHOR MEASUREMENTS" below).
+For iter 0, skip step 1 (no prior to copy) and run the iter-0 signature inventory
++ anchor pass instead (see "At iter 0: INVENTORY THE SIGNATURE ELEMENTS, then
+RECORD ANCHOR MEASUREMENTS" below).
 
 ## L1 / L2 / L3 — the grounding hierarchy (read this BEFORE iter 0)
 
@@ -309,9 +384,9 @@ Every property of the figure has a grounding source. There are exactly three:
   aesthetic they want.
 - **L2 — `aesthetic-library.md`.** Paper-figure conventions. Used as fallback,
   sanity backstop, and extension menu. **READ THIS FILE BEFORE iter 0.**
-- **L3 — your own opinion.** **DISALLOWED.** Every value you choose for the figure
-  must trace back to L1 or L2. "I think it looks better this way" is unsupported
-  L3 noise; the user has explicitly banned it.
+- **L3 — your own opinion.** Not allowed, because the user wants every value to
+  trace back to L1 or L2. "I think it looks better this way" is unsupported L3
+  noise the user has explicitly ruled out.
 
 Per-property precedence rule:
 
@@ -332,16 +407,59 @@ spine/gridline choices because anti-aliased lines plus background averaged
 toward white. Route those properties to L2 unless you have rigorous line-pixel
 evidence.
 
-## At iter 0, RECORD ANCHOR MEASUREMENTS (the self-defense gate)
+## At iter 0: INVENTORY THE SIGNATURE ELEMENTS, then RECORD ANCHOR MEASUREMENTS (the self-defense gate)
 
 Before you write `figure_iter0.py`:
 
-1. **Read `aesthetic-library.md`** in full. It tells you which properties are
+1. **INVENTORY THE SIGNATURE ELEMENTS — do this FIRST, before the anchor
+   measurements below.** Read `inputs/reference_clean.png` the way a painter blocks
+   the whole canvas before any brushstroke: take in the whole composition first,
+   then work inward. Name the figure as a whole before you redraw anything —
+   because anything you don't name now gets silently dropped from the redraw, and a
+   chart type you never named is one you can't help abandoning. Read every line off
+   the image, never inferred from `data.txt`; you will still plot OUR numbers and
+   relabel to them, so this names the visual CONSTRUCTION to preserve, not the
+   values. Write it into `notes_iter0.md` in EXACTLY this shape, and nothing else:
+
+   ```markdown
+   ## Signature inventory
+   **Chart type:** <one line — the specific construction, e.g. `grouped vertical bars, 3 series, hatch-fill encoding, log y-axis`, never the bare category `a bar chart`; if composite, name its parts>
+   **Signature element:** <one line — the single motif this figure is remembered by (broken axis / inset zoom / marginal histograms / a dashed reference line spanning stacked sub-axes / colorbar in the panel gap); name one, it is the thing the redraw must not drop>
+   **Motifs:**
+   - <one distinctive treatment per bullet, 3–6 bullets, each said once; don't restate the chart type>
+   ```
+
+   Make the motif bullets collectively cover — without writing the axis names as
+   labels — (1) chart family + what carries each series (line / bar / marker /
+   patch); (2) data-to-ink density, dense Nature-grid vs sparse NeurIPS; (3) color
+   logic, categorical / sequential / diverging, and whether color lives on the marks
+   or only the labels; (4) framing devices that carry meaning — gridlines, callouts,
+   insets, twin axes, error/shaded bands, shared legend, multi-panel grouping. One
+   worked example (produce what YOUR reference actually shows, in this exact shape):
+
+   ```markdown
+   ## Signature inventory
+   **Chart type:** scatter-with-marginals, 2 groups, shared x.
+   **Signature element:** kernel-density marginals on the top and right edges.
+   **Motifs:**
+   - 95% confidence ellipse per group
+   - diverging two-hue palette, color on the markers
+   - faint dotted gridlines, axes-below
+   - single outside-right legend
+   - left+bottom hairline spines
+   ```
+
+   Then re-read it once: could someone redraw THIS figure from the inventory alone,
+   or only a generic chart of the same family? If only generic, add the missing
+   distinctive element as one more bullet before you draw. This inventory is the
+   preserve contract the rest of your drawing matches and the Reviewer audits —
+   write it before you run the low-level anchors below.
+2. **Read `aesthetic-library.md`** in full. It tells you which properties are
    PIL-reliable vs PIL-unreliable, and the most-likely classes for each.
-2. **Run the iter-0 PIL pass** on `inputs/reference_clean.png`, but ONLY for
+3. **Run the iter-0 PIL pass** on `inputs/reference_clean.png`, but ONLY for
    PIL-reliable properties (per the library). Write results to `notes_iter0.md`
    under `## Anchor measurements`.
-3. **For PIL-unreliable value estimates, identify the L2 class instead** by eye +
+4. **For PIL-unreliable value estimates, identify the L2 class instead** by eye +
    the library's class menu, and record your class choice with one-sentence
    justification. For visual structure, record the L1 observation.
 
@@ -527,6 +645,32 @@ def assert_no_clipped_labels(fig):
                 out.append(f"clipped: '{t.get_text()}' bbox={tb}")
     if out:
         raise AssertionError("CLIPPED LABELS:\n  - " + "\n  - ".join(out[:10]))
+
+
+def assert_text_above_plot_layers(fig):
+    """Floor self-check: visible text should render above data/grid/image layers."""
+    fig.canvas.draw()
+    out = []
+    for ax in fig.axes:
+        max_nontext_z = max(
+            [artist.get_zorder() for artist in ax.get_children()
+             if not isinstance(artist, matplotlib.text.Text)]
+            or [0]
+        )
+        text_artists = (
+            list(ax.texts)
+            + list(ax.get_xticklabels())
+            + list(ax.get_yticklabels())
+            + [ax.title, ax.xaxis.label, ax.yaxis.label]
+        )
+        for text in text_artists:
+            if text.get_text() and text.get_visible() and text.get_zorder() <= max_nontext_z:
+                out.append(
+                    f"text_obscured_by_marks risk: '{text.get_text()}' "
+                    f"zorder={text.get_zorder()} <= data/grid max zorder={max_nontext_z}"
+                )
+    if out:
+        raise AssertionError("TEXT LAYERING FLOOR VIOLATION:\n  - " + "\n  - ".join(out[:10]))
 ```
 
 ### Snippet B — Label-band sizing (compute headroom from OUR data, not the reference)

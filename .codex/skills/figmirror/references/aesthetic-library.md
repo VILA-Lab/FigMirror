@@ -127,11 +127,13 @@ convergence.
 
 1. Doer commits to a hairline-element class only with PIL-quoted evidence
    in notes (see `## Gridlines` direction property for the canonical example).
-2. Reviewer affirms a hairline-element claim only after PIL-verifying it on
-   the DRAFT image.
-3. If reviewer cannot PIL-verify (e.g. the metric is genuinely hard), the
-   reviewer says "I cannot confirm by eye" and skips the affirmation rather
-   than fabricating one to fill the anchor list.
+2. Reviewer affirms a hairline-element claim only when the audit view includes
+   an Orchestrator-staged diagnostic for that property and the diagnostic agrees
+   with the visible draft. The Reviewer uses staged diagnostics as evidence; it
+   does not run PIL or code itself.
+3. If no staged diagnostic exists, or the staged diagnostic is inconclusive, the
+   reviewer says "not confirmed from staged evidence" and skips the affirmation
+   rather than fabricating one to fill the anchor list.
 4. If source code disables a hairline element but the audit affirms its
    presence, the audit fails the floor because it is not verifying the rendered
    image. This is worse than missing the defect because a wrong preserve item
@@ -363,13 +365,13 @@ quantities (aspect, sizes, ratios) and "same class" tolerance for categorical on
       notes.** "Evidence is clear" by eye is not evidence — gridlines are
       precisely the elements where the eye is most unreliable.
 
-  - **Reviewer due diligence:** When the doer claims gridline
-    direction in `anchor.what_is_right`, the reviewer MUST PIL-verify on the
-    DRAFT image (same row+col profile snippet, applied to the draft):
-    - If the audit affirms `BOTH directions` but PIL shows zero
-      vertical-direction dark columns, flag a floor-level verification
-      violation.
-    - Do not repeat library defaults as draft facts; verify the exported image.
+  - **Reviewer due diligence:** When the doer claims gridline direction in
+    `anchor.what_is_right`, the Reviewer may affirm it only when an
+    Orchestrator-staged direction diagnostic is present in the audit view and
+    agrees with the visible draft. The Reviewer uses staged diagnostics as
+    evidence; it does not run the row/col profile snippet, PIL, or code itself.
+    If staged evidence is absent or inconclusive, say "not confirmed from staged
+    evidence" and do not repeat library defaults as draft facts.
 - **Dependencies:** `ax.set_axisbelow(True)` always — gridlines must sit behind data.
 - **PIL reliability:**
   - Color: ⚠️ **CONDITIONALLY RELIABLE** — `mean()` is a trap (gives near-

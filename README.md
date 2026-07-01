@@ -21,6 +21,7 @@
 
 <p align="center">
   <a href="#showcase">Showcase</a> |
+  <a href="#milestones">Milestones</a> |
   <a href="#quick-start">Quick Start</a> |
   <a href="#how-it-works">How It Works</a> |
   <a href="#star-history">Star History</a> |
@@ -31,6 +32,11 @@
 <p align="center">
   <b>English</b> | <a href="README.zh-CN.md">中文</a>
 </p>
+
+<h2 id="milestones">🔥 Milestones</h2>
+
+- **Algorithm update:** the Codex path now uses role-separated Drawer / Reviewer agents, far-near visual review views, reviewer bounding boxes, and annotated feedback passed into the next iteration.
+- **Evaluation update:** we have built an internal hybrid style scorer for repeatable method comparison. A paper release covering the scorer protocol, benchmark design, and analysis is planned.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/0656009c-77c7-41e5-8423-07c3411aef13" width="900" controls
@@ -96,6 +102,10 @@ uv run python scripts/figcopy_serve.py --workspace .artifacts/figmirror-workspac
 
 Open `http://127.0.0.1:8765/`.
 
+The installer auto-detects Claude Code and Codex. For Codex, it installs the
+`figmirror` skill plus the `figmirror-drawer` and `figmirror-reviewer` custom
+agents used by the current role-separated algorithm.
+
 <a id="codex-skill"></a>
 <a id="claude-code-skill"></a>
 
@@ -105,6 +115,14 @@ Use this when you want FigMirror inside your agent, no web UI.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash
+```
+
+Target one runtime explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash -s -- --claude
+curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash -s -- --all
 ```
 
 Then attach a paper-figure screenshot, paste your data, and ask:
@@ -123,7 +141,9 @@ Need manual target selection, Claude backend, or troubleshooting? See [Detailed 
 
 > Illustration of FigMirror. The left panel shows the core agentic loop; the right panel introduces Grounded Measurement.
 
-FigMirror uses an agentic Drawer-Reviewer loop. The Drawer renders a candidate figure with ***Grounded Measurement***. The Reviewer compares it with the reference image, then returns a visual review, a revision checklist, and a preserve list. The preserve list accumulates across iterations as an anchor against style drift. The Aesthetic Lib provides fallback principles, style rules, and figure properties when the agents disagree or the Drawer has low confidence.
+FigMirror uses an agentic Drawer-Reviewer loop. In the current Codex path, a top-level Orchestrator delegates drawing to a named Drawer agent and visual audit to a named Reviewer agent. The Reviewer sees a far-view composite plus full-resolution source and candidate views, returns structured feedback with bounding boxes, and the Orchestrator turns that feedback into an annotated image and notes for the next Drawer pass.
+
+The Drawer renders a candidate figure with ***Grounded Measurement***. The Reviewer compares it with the reference image, then returns a visual review, a revision checklist, and a preserve list. The preserve list accumulates across iterations as an anchor against style drift. The Aesthetic Lib provides fallback principles, style rules, and figure properties when the agents disagree or the Drawer has low confidence.
 
 For 3D figures, FigMirror adds geometry-aware prompting for camera, scale, surfaces, lighting, and repair checks, helping the loop preserve the 3D composition of the reference figure while producing editable matplotlib code.
 
@@ -161,6 +181,8 @@ Start with [docs/contributing.md](docs/contributing.md). Good first PRs include 
 - [x] Ship the reference-to-figure loop as Codex and Claude Code skills.
 - [x] Add a local Web UI for upload, iteration browsing, and refinement.
 - [x] Publish a 139-figure gallery so users can start without hunting for references.
-- [ ] Define a prompt-contribution benchmark verifier for comparing prompt changes on fixed reference/data cases.
-- [ ] Curate a FigMirror benchmark set with reference figures, input data, generated outputs, and human preference labels.
-- [ ] Release the benchmarking paper with the verifier protocol, dataset, baselines, and prompt-contribution findings.
+- [x] Refine the Codex algorithm with role-separated Drawer / Reviewer agents and bbox-annotated visual feedback.
+- [x] Build an internal hybrid style scorer for repeatable method comparison.
+- [ ] Release the scorer protocol, benchmark design, baselines, and analysis in a paper.
+- [ ] Curate a public benchmark set with reference figures, input data, generated outputs, and human preference labels.
+- [ ] Harden install and runtime docs for more OpenAI-compatible and local-agent backends.

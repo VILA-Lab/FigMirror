@@ -211,6 +211,8 @@ if [[ "${INSTALL_CLAUDE:-}" == 1 ]]; then
 fi
 
 if [[ "${INSTALL_CODEX:-}" == 1 ]]; then
+  require_file ".codex/agents/figmirror-drawer.toml"
+  require_file ".codex/agents/figmirror-reviewer.toml"
   require_file ".codex/skills/figmirror/SKILL.md"
   require_file ".codex/skills/figmirror/agents/openai.yaml"
   require_file ".codex/skills/figmirror/references/drawer.md"
@@ -232,6 +234,7 @@ if [[ "${INSTALL_CODEX:-}" == 1 ]]; then
   require_file ".codex/skills/figmirror/references/three-d/marks-and-panels.md"
   require_file ".codex/skills/figmirror/references/three-d/reviewer-scorecard.md"
   require_file ".codex/skills/figmirror/references/three-d/repair-feedback.md"
+  require_file ".codex/skills/figmirror/scripts/figannot.py"
   require_file ".codex/skills/figmirror/scripts/score_3d_candidates.py"
   validate_three_d_layout ".codex/skills/figmirror"
 fi
@@ -283,9 +286,14 @@ fi
 
 if [[ "${INSTALL_CODEX:-}" == 1 ]]; then
   echo "[install] Codex → $CODEX_TARGET/"
-  mkdir -p "$CODEX_TARGET/skills"
+  mkdir -p "$CODEX_TARGET/agents" "$CODEX_TARGET/skills"
+  install_file "$TMPDIR/.codex/agents/figmirror-drawer.toml" \
+               "$CODEX_TARGET/agents/figmirror-drawer.toml"
+  install_file "$TMPDIR/.codex/agents/figmirror-reviewer.toml" \
+               "$CODEX_TARGET/agents/figmirror-reviewer.toml"
   install_dir "$TMPDIR/.codex/skills/figmirror" \
               "$CODEX_TARGET/skills/figmirror"
+  echo "  agents: figmirror-drawer, figmirror-reviewer"
   echo "  skill:  figmirror"
 fi
 
