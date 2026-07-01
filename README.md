@@ -35,8 +35,10 @@
 
 <h2 id="milestones">🔥 Milestones</h2>
 
-- **Algorithm update:** the Codex path now uses role-separated Drawer / Reviewer agents, far-near visual review views, reviewer bounding boxes, and annotated feedback passed into the next iteration.
-- **Evaluation update:** we have built an internal hybrid style scorer for repeatable method comparison. A paper release covering the scorer protocol, benchmark design, and analysis is planned.
+- **Jun 1, 2026 — FigMirror release:** shipped FigMirror as Claude Code and Codex skills, with a local Web UI for upload, iteration browsing, and refinement.
+- **Jun 17, 2026 — Algorithm update:** refined the Codex path with role-separated Drawer / Reviewer agents, far-near visual review views, reviewer bounding boxes, and annotated feedback passed into the next iteration.
+- **Jul 1, 2026 — Evaluation update:** built an internal hybrid style scorer for repeatable method comparison.
+- <span style="color:#6b7280"><strong>Future — Paper release:</strong> release the scorer protocol, benchmark design, baselines, and analysis.</span>
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/0656009c-77c7-41e5-8423-07c3411aef13" width="900" controls
