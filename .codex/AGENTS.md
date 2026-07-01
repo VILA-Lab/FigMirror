@@ -11,6 +11,7 @@ camera-ready PDF and a self-contained matplotlib script.
 |------|------------|
 | `.codex/skills/figmirror/SKILL.md` | Codex runtime entry point — read this first when the user invokes FigMirror / `figmirror` |
 | `.codex/skills/figmirror/references/*.md` | Codex runtime prompt files: Preprocessor, Drawer, Reviewer, Orchestrator, and Aesthetic library |
+| `.codex/agents/figmirror-{drawer,reviewer}.toml` | Codex custom-agent role boundaries used by the role-separated algorithm |
 | `.codex/skills/figmirror/references/three-d-prompting.md` + `references/three-d/*.md` | Optional 3D insert, loaded only by the 3D gate |
 | `.claude/skills/figmirror/SKILL.md` + `.claude/agents/figure-{preprocessor,illustrator,critic}.md` | Claude runtime skill + subagent prompt files |
 | `resources/prompts/figure-style-copier.md` | Development/historical consolidated Claude prompt bundle; release/runtime routes through the skill files |
@@ -22,29 +23,30 @@ camera-ready PDF and a self-contained matplotlib script.
 
 1. Read `.codex/skills/figmirror/SKILL.md` — it tells you how the
    top-level Codex process orchestrates the Drawer/Reviewer loop.
-2. Treat `.codex/skills/figmirror/references/*.md` as the Codex
+2. Before changing FigMirror skill prompts, role transport, or the
+   Orchestrator loop, read `.codex/agents/figmirror-drawer.toml`,
+   `.codex/agents/figmirror-reviewer.toml`, and `docs/method.md` so the
+   named-role gate and annotated feedback chain stay aligned.
+3. Treat `.codex/skills/figmirror/references/*.md` as the Codex
    runtime prompt surface. Update these files first when changing behavior.
-3. The reference preprocessor and Reviewer subprocesses are launched via:
-   ```bash
-   CODEX=/Applications/Codex.app/Contents/Resources/codex
-   ```
-   Verify this path exists before starting.
+4. The default Codex loop requires named project custom agents
+   `figmirror-drawer` and `figmirror-reviewer`. The Experiment adapter installs
+   those role configs into its per-run `CODEX_HOME` before launching Codex.
 
 ## Key architectural facts
 
-- **No runtime Python library.** The core system is prompts + `codex exec`
-  Bash tooling. `pyproject.toml` exists for project metadata and dev deps.
-- **Codex Orchestrator + Drawer run in-process.** The main Codex session owns
-  loop state, drawing, floor self-checks, and final selection. Reference
-  preprocessing and Reviewer audit remain separate bounded `codex exec` passes.
-  Native subagents are experimental only and should not be used in the default
-  FigMirror path.
+- **No runtime Python library.** The core system is prompts plus Codex role
+  transport. `pyproject.toml` exists for project metadata and dev deps.
+- **Codex Orchestrator is role-separated.** The main Codex session owns loop
+  state, role dispatch, artifact checks, and final selection. Drawing is handled
+  by `figmirror-drawer`; visual audit is handled by `figmirror-reviewer`.
 - **Reviewer tool restriction is prompt-level in Codex** (no `--allowedTools`
   equivalent). The Reviewer prompt instructs it not to write files; track violations.
 - **Aesthetic library and gated inserts are the living layers.** Keep runtime
   behavior in the structured skill files, not in consolidated prompt bundles.
 
-## Current status (as of 2026-05-06)
+## Current status (as of 2026-07-01)
 
-FigMirror ships as structured Claude Code and Codex skills. Pending product work
-is tracked in `openspec/changes/phase0-style-transfer-loop/tasks.md`.
+FigMirror ships as structured Claude Code and Codex skills. The Codex path uses
+named Drawer/Reviewer roles plus deterministic annotation tooling for bbox-based
+review feedback.

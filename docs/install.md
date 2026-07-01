@@ -18,6 +18,9 @@ Auto-detect Codex and Claude Code:
 curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash
 ```
 
+For Codex, this installs both the `figmirror` skill and the required custom
+agents: `figmirror-drawer` and `figmirror-reviewer`.
+
 Choose a target explicitly:
 
 ```bash

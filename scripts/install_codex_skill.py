@@ -14,6 +14,12 @@ from pathlib import Path
 SKILL_NAME = "figmirror"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = REPO_ROOT / ".codex" / "skills" / SKILL_NAME
+SOURCE_AGENTS_DIR = REPO_ROOT / ".codex" / "agents"
+
+REQUIRED_AGENT_FILES = (
+    "figmirror-drawer.toml",
+    "figmirror-reviewer.toml",
+)
 
 REQUIRED_FILES = (
     "SKILL.md",
@@ -38,6 +44,7 @@ REQUIRED_FILES = (
     "references/three-d/marks-and-panels.md",
     "references/three-d/reviewer-scorecard.md",
     "references/three-d/repair-feedback.md",
+    "scripts/figannot.py",
     "scripts/score_3d_candidates.py",
 )
 
@@ -166,6 +173,18 @@ def validate_required_files(skill_dir: Path) -> None:
         raise ValueError("Missing required skill files: " + ", ".join(missing))
 
 
+def validate_required_agent_files(agent_dir: Path = SOURCE_AGENTS_DIR) -> None:
+    missing = [rel for rel in REQUIRED_AGENT_FILES if not (agent_dir / rel).is_file()]
+    if missing:
+        raise ValueError("Missing required Codex agent files: " + ", ".join(missing))
+
+    for rel in REQUIRED_AGENT_FILES:
+        text = (agent_dir / rel).read_text(encoding="utf-8")
+        expected_name = rel[:-5] if rel.endswith(".toml") else rel
+        if f'name = "{expected_name}"' not in text:
+            raise ValueError(f"{rel} must declare name = {expected_name!r}")
+
+
 def line_count(path: Path) -> int:
     return len(path.read_text(encoding="utf-8").splitlines())
 
@@ -281,6 +300,7 @@ def validate_skill_package(skill_dir: Path = SOURCE_DIR) -> None:
     if not skill_dir.is_dir():
         raise ValueError(f"Skill source directory not found: {skill_dir}")
     validate_required_files(skill_dir)
+    validate_required_agent_files()
     validate_frontmatter(skill_dir)
     validate_three_d_prompt_structure(skill_dir)
     validate_no_repo_runtime_refs(skill_dir)
@@ -299,13 +319,17 @@ def iter_skill_files(skill_dir: Path) -> list[Path]:
     return files
 
 
-def print_plan(source: Path, destination: Path) -> None:
+def print_plan(source: Path, destination: Path, agent_destination: Path) -> None:
     files = iter_skill_files(source)
     print(f"Source: {source}")
     print(f"Destination: {destination}")
     print(f"Files: {len(files)}")
     for path in files:
         print(f"  {path.relative_to(source).as_posix()}")
+    print(f"Agent source: {SOURCE_AGENTS_DIR}")
+    print(f"Agent destination: {agent_destination}")
+    for rel in REQUIRED_AGENT_FILES:
+        print(f"  {rel}")
 
 
 def remove_existing(destination: Path) -> None:
@@ -331,6 +355,20 @@ def copy_skill(source: Path, destination: Path, force: bool) -> None:
     )
 
 
+def copy_agent_configs(source: Path, destination: Path, force: bool) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    for rel in REQUIRED_AGENT_FILES:
+        src = source / rel
+        dst = destination / rel
+        if dst.exists():
+            if not force:
+                raise FileExistsError(
+                    f"Target already exists: {dst}. Re-run with --force to replace it."
+                )
+            remove_existing(dst)
+        shutil.copy2(src, dst)
+
+
 def main() -> int:
     args = parse_args()
 
@@ -346,20 +384,23 @@ def main() -> int:
 
     target_root = target_root_from_args(args)
     destination = target_root / SKILL_NAME
+    agent_destination = target_root.parent / "agents"
 
     if args.dry_run:
-        print_plan(SOURCE_DIR, destination)
+        print_plan(SOURCE_DIR, destination, agent_destination)
         if destination.exists() and not args.force:
             print("Note: destination exists; install would fail without --force.")
         return 0
 
     try:
         copy_skill(SOURCE_DIR, destination, args.force)
+        copy_agent_configs(SOURCE_AGENTS_DIR, agent_destination, args.force)
     except Exception as exc:
         print(f"[ERROR] Install failed: {exc}", file=sys.stderr)
         return 1
 
     print(f"[OK] Installed {SKILL_NAME} to {destination}")
+    print(f"[OK] Installed FigMirror agents to {agent_destination}")
     return 0
 
 
