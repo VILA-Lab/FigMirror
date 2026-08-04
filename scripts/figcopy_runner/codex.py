@@ -1243,10 +1243,10 @@ class CodexRunner:
             # over a run that's actually usable as Stage-2 baselines.
             ship_path = workdir / "figure.png"
             disk_iters = sorted(
-                _parse_iter_n_from_path(p.name) or -1
+                n
                 for p in workdir.glob("img_iter*.png")
+                if (n := _parse_iter_n_from_path(p.name)) is not None
             )
-            disk_iters = [n for n in disk_iters if n >= 0]
             if (
                 not protocol_failure
                 and final != "shipped"
