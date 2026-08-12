@@ -880,10 +880,10 @@ class ClaudeRunner:
             # newer iter even when an earlier passing one exists.
             ship_path = workdir / "figure.png"
             disk_iters = sorted(
-                _parse_iter_n_from_path(p.name) or -1
+                n
                 for p in workdir.glob("img_iter*.png")
+                if (n := _parse_iter_n_from_path(p.name)) is not None
             )
-            disk_iters = [n for n in disk_iters if n >= 0]
             if (
                 not protocol_failure
                 and final != "shipped"
