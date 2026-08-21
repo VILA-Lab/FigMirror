@@ -169,8 +169,8 @@ Start with [docs/contributing.md](docs/contributing.md). Good first PRs include 
 <h2 id="star-history"><img src="docs/assets/icons/star-history.svg" alt="" width="22" height="22" align="absmiddle"> Star History</h2>
 
 <p align="center">
-  <a href="https://star-history.com/#vila-lab/figmirror&Date">
-    <img alt="FigMirror GitHub star history chart" src="https://api.star-history.com/svg?repos=vila-lab/figmirror&type=Date" width="100%">
+  <a href="https://star-history.dera.page/#vila-lab/figmirror&Date">
+    <img alt="FigMirror GitHub star history chart" src="https://star-history.dera.page/svg?repos=vila-lab/figmirror&type=Date" width="100%">
   </a>
 </p>
 
