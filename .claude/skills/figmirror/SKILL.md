@@ -1,35 +1,32 @@
 ---
 name: figmirror
-description: This FigMirror skill should be used when the user asks to "mirror this figure's style", "copy this figure's style", "make a chart that looks like this paper", "reproduce this figure with my data", "match this paper's aesthetic", "I want a NeurIPS-quality version of this", or any variant where they hand over a cropped or uncropped reference figure AND their own data and want their data rendered in the same visual register. ALSO triggers when the user attaches a paper-figure screenshot plus tabular data and asks for matplotlib output. Does NOT trigger on generic matplotlib chart requests with no reference image — that's a basic matplotlib task, not style transfer.
+description: >
+  FigMirror mirrors the visual style of a top-conference paper figure (NeurIPS /
+  ICML / ICLR / Nature family) onto the user's own data. Takes dirty data plus a
+  reference figure screenshot (cropped or uncropped), preprocesses the reference
+  crop, runs a Drawer/Reviewer loop, and outputs a camera-ready PDF plus a
+  self-contained matplotlib script with an inline DATA SECTOR.
 ---
 
 # FigMirror (`figmirror`)
 
-Transfer the visual style of a top-conference paper figure (NeurIPS / ICML /
-ICLR / Nature / Science) onto user data via an iterative Drawer / Reviewer
-loop. Output is a self-contained matplotlib script + PNG + type-42 PDF that
-matches the reference's STYLE — not its data.
-
-## When to use
-
-Trigger when the user provides all three:
-
-- A reference paper-figure screenshot.
-- Their own data in any parseable form (pasted table, CSV, TSV, markdown
-  table, or dirty terminal text).
-- An expectation that the output should look like the reference — even via
-  casual phrasing ("make this chart but with my numbers", "redo this in
-  matplotlib"). This includes 3D references when the reference or data is
+Use this skill when the user wants to:
+- Transfer the visual style of a top-conference paper figure to their own data.
+- Produce a camera-ready matplotlib figure matching a reference screenshot in
+  style, not in data.
+- Mirror 3D paper-figure references such as surfaces, scatter, trajectories,
+  bars, layered waterfalls, or plane projections when the reference or data is
   actually 3D.
+- Receive a self-contained `.py` script with editable inline data plus PNG/PDF
+  outputs.
 
-Do not trigger on plain matplotlib chart requests with no reference image.
+## Required Inputs
 
-## Required inputs
-
-- Reference image (PNG / JPG), cropped or uncropped. It may include margins,
-  captions, neighboring panels, or page text; Stage 0 preprocesses it.
-- User data (any parseable form).
-- Optional working directory. Default: `<cwd>/figmirror-runs/<run-id>/`.
+- A reference figure screenshot (`PNG`/`JPG`). It may include margins, captions,
+  neighboring panels, or page text; Stage 0 preprocesses it.
+- The user's data in any parseable form: pasted table, CSV, TSV, markdown table, or
+  dirty terminal text.
+- A working directory for iteration artifacts.
 
 ## 3D Insert Gate
 
@@ -41,123 +38,168 @@ an ordinary 2D task into 3D.
 
 ## Architecture
 
-Three bundled subagents drive the loop; the caller orchestrates from the main
-thread:
-
-- `figure-preprocessor` — **Preprocessor**. Stage 0: preserves the raw upload,
-  crops away margins/captions/page text/neighboring panels when safe, and writes
-  `inputs/reference_clean.png` plus a crop check/report.
-- `figure-illustrator` — **Drawer**. Per iter: reads reference + data + L2
-  library, produces `figure_iter<N>.py`, `img_iter<N>.png`,
-  `notes_iter<N>.md`, `floor_selfcheck_iter<N>.txt`. Self-checks the layout
-  floor before returning.
-- `figure-critic` — **Reviewer**. Per iter: vision-only audit on a
-  fresh-context view (reference + draft + L2 library + optional 3D insert +
-  prior audit only). Returns ONE strict JSON object per the review schema.
-
-Subagents are stateless across dispatch; iter-to-iter state flows through
-workdir files.
-
-Prefer `subagent_type: figure-preprocessor` / `figure-illustrator` /
-`figure-critic`. Fallback path
-when those names don't resolve: see `references/iter-loop-spec.md` §
-"Subagent dispatch fallback".
+- **Python runner** owns UI lifecycle, cancellation, optional
+  data-gen, and launching the main `claude` process.
+- **The top-level `claude` process is Orchestrator only.** It owns iteration state,
+  role dispatch, artifact checks, Reviewer audit-view staging, deterministic
+  review-gate invocation, stop decisions, and final selection.
+- **Drawer** runs as the named `figmirror-drawer` custom subagent through the
+  `Task` tool with `subagent_type="figmirror-drawer"` and
+  `run_in_background=false`. It writes each iteration's matplotlib
+  script, render, notes, and floor self-check in the staged workdir.
+- **Reviewer** runs as the named `figmirror-reviewer` custom subagent through the
+  `Task` tool with `subagent_type="figmirror-reviewer"` and
+  `run_in_background=false`. It sees only the staged audit view:
+  the far-view composite, full-resolution reference/draft near views, the
+  Reviewer prompt, the aesthetic library, fixed diagnostics, and optional fixed
+  3D audit material. It returns strict
+  JSON including `boxes`; `figannot.py review-decision` validates and records the
+  result before any Drawer or finalization decision. The `Task` tool carries a
+  single text prompt and has no attachment channel, so the Orchestrator gives
+  the Reviewer an ordered list of absolute image paths and the Reviewer opens
+  each one with `Read`, once, in that order.
+- **3D flow** uses the standard Orchestrator plus named Drawer/Reviewer
+  subagents, and optional candidate-scoring path for strict reproduction.
 
 ## Workflow
 
-For each run:
+1. Read these bundled references from this skill directory:
+   - `references/preprocessor.md` for Stage-0 reference crop cleanup.
+   - `references/orchestrator-claude.md` for loop wiring and stop conditions.
+     `references/orchestrator-codex.md` ships alongside it as the diff baseline
+     for the port and must not be followed at runtime.
+   - `references/drawer.md` for the Drawer instructions.
+   - `references/reviewer.md` for the Reviewer instructions.
+   - `references/aesthetic-library.md` for the L2 convention library.
+   - `references/three-d-prompting.md` only when the 3D insert gate is enabled.
+2. Preserve the uploaded reference as `inputs/reference_raw.png`, then run the
+   reference preprocessor to write `inputs/reference_clean.png`,
+   `inputs/reference_crop_check.png`, and `inputs/reference_crop_report.md`.
+   It is dispatched as a general-purpose subagent — there is no named
+   preprocessor role — per the Stage 0 section of
+   `references/orchestrator-claude.md`. Skip it only when the runner already
+   staged those three files.
+3. Echo the parsed data structure before drawing. If the user explicitly asked you
+   to make up data or proceed without confirmation, record that in `data_echo.md`
+   and continue; otherwise ask for confirmation.
+4. When the 3D insert gate is enabled, stage `references/three-d-prompting.md`
+   plus `references/three-d/` beside the normal prompts. The router selects
+   exactly one mode file: `three-d/style-transfer.md` for ordinary user-data
+   figures, or `three-d/strict-reproduction.md` for reproduction, comparison, or
+   candidate/control replacement. For strict 3D reproduction runs that need
+   quantitative candidate diagnosis, also stage `scripts/score_3d_candidates.py`;
+   do not use that scorer for ordinary style transfer. The top-level
+   Orchestrator owns final selection and must run the selected mode's
+   rendered-image gates before copying any candidate to the final figure.
+   Always stage `scripts/figannot.py`; it is the deterministic operator for
+   building audit composites and drawing Reviewer boxes.
+5. The top-level agent follows `references/orchestrator-claude.md` and
+   dispatches `figmirror-drawer` for each iter. Every Drawer prompt includes the
+   exact trace line `Iter: <N>` with the current non-negative decimal iteration.
+   The Drawer writes
+   `figure_iter<N>.py`, `img_iter<N>.png`, `notes_iter<N>.md`, and
+   `floor_selfcheck_iter<N>.txt`; the Orchestrator verifies those files before
+   any Reviewer handoff.
+6. Stage `audit_view_<N>`, run `scripts/figannot.py compose` to create
+   `composite.png` and `review_prompt.txt`, fit the staged near views with
+   `scripts/fit_images.py`, and dispatch `figmirror-reviewer` as
+   described in `references/orchestrator-claude.md`. List `composite.png`,
+   `reference_clean.png`, and `draft_fullres.png` as an ordered set of absolute
+   paths for the Reviewer to `Read` exactly once each; append the optional
+   strict-3D accepted control as a fourth entry when present. The Reviewer sees only those images plus the aesthetic library,
+   fixed diagnostics, and optional 3D insert, then returns strict JSON without
+   re-reading an image it has already opened, and without reading
+   review/Drawer history.
+7. Run `scripts/figannot.py review-decision` after every Reviewer result. A
+   clean result before the run reaches `min_reviews` total valid Reviewer calls
+   starts another Reviewer on the same immutable draft with no Drawer in between.
+   Actionable feedback permits `scripts/figannot.py draw --max-iters <max_iters>`
+   and another Drawer when below the hard `max_iters` cap. The helper must
+   succeed before spawning that Drawer. A missing, malformed, empty, or inconsistent
+   Reviewer result returns `retry_reviewer`: it does not count, never triggers
+   Drawer, and starts one fresh Reviewer on the same immutable draft. A second
+   consecutive invalid result fails closed. Pass both `--min-reviews` and
+   `--max-iters` to every `review-decision` invocation, plus `--strict-3d` when
+   the router selected `three-d/strict-reproduction.md`.
+8. Stop when the deterministic gate returns `ship`: the quality floor passed,
+   the verdict is clean, and at least `min_reviews` valid Reviewer calls have
+   completed across the run. Default `max_iters=5`; it is always a hard Drawer
+   cap. If the gate returns `stop_at_cap`, do not draw again: select under the
+   existing hard-cap policy and finalize an existing iteration.
+9. Write final `figure.py`, `figure.png`, `figure.pdf`, `output.png`,
+   `floor_selfcheck_final.txt`, `selection.md`, `process.md`, and `status.json`.
+   `output.png` is the evaluator-facing PNG and may be identical to
+   `figure.png`.
 
-1. **Stage workdir.** Pre-create every directory the loop will write into
-   (subagents Write into existing dirs only — workspace permission quirk).
-   Stage the uploaded reference image to `inputs/reference_raw.png` and also
-   to `inputs/reference_clean.png` as a temporary first-paint copy; stage parsed
-   data to `inputs/data.txt`, and the L2 library to
-   `inputs/aesthetic-library.md`; stage the 3D router plus
-   `references/three-d/` only when the 3D insert gate is enabled. The router
-   selects exactly one mode file: `three-d/style-transfer.md` for ordinary
-   user-data figures, or `three-d/strict-reproduction.md` for reproduction,
-   comparison, or candidate/control replacement. For strict 3D reproduction runs
-   that need quantitative candidate diagnosis, also stage the optional candidate
-   scorer. The top-level Orchestrator owns final selection and must run the
-   selected mode's rendered-image gates before copying any candidate to the
-   final figure.
-2. **Preprocess reference.** Dispatch `figure-preprocessor` before data-gen,
-   Drawer, or Reviewer. It writes the clean L1 anchor to
-   `inputs/reference_clean.png` and records the before/after crop check.
-3. **Echo data parse to user (Decision-7).** Show parsed shape (rows × cols,
-   columns, NaN cells, sample row); proceed when confirmed, or skip if the
-   user pre-authorized. Either way, persist the echo to `data_echo.md`.
-4. **Iterate** with the caller-provided `max_iters`; default to 6 when the
-   caller gives no explicit limit. If the caller enables auto-until-shipped,
-   ignore `max_iters` and continue until `ship` or a real blocker. Each iter:
-   - Dispatch the Drawer.
-   - Stage the Reviewer's audit view (reference + new draft + L2 library +
-     optional 3D insert + prior audit only — NEVER `data.txt` or drawer
-     notes).
-   - Dispatch the Reviewer.
-   - Parse the audit JSON.
-   - Apply the decision rule:
-     `floor.passed && verdict == "ship"` → ship and break;
-     else `N == max_iters - 1` and not auto → break (fall through to select-best);
-     else continue.
-5. **Select-best fallback** (only if `ship` never fires). Pick the
-   lowest-drift iter among `floor.passed && verdict == "close"` candidates.
-   Document the choice in `selection.md`.
-6. **Write canonical artifacts.** Copy the chosen-iter script + PNG to
-   `figure.py` / `figure.png`. Re-render `figure.pdf` with
-   `pdf.fonttype = 42`.
-7. **Surface the result to the user.** Render `figure.png` inline, list
-   paths to `figure.py` / `figure.pdf`, give a 1-2 sentence trajectory
-   summary. Do not show audit JSONs or per-iter scripts unless asked.
+## Artifact Layout
 
-The full per-step spec (bash commands for staging, dispatch brief
-templates, audit JSON parsing snippets, drift calculation, fallback
-selection) lives in `references/iter-loop-spec.md`. Read it before
-running the loop.
+```text
+<workdir>/
+  inputs/
+    reference_raw.png
+    reference_clean.png
+    reference_crop_check.png
+    reference_crop_report.md
+    data.txt
+    aesthetic-library.md
+  prompts/
+    preprocessor.md
+    drawer.md
+    reviewer.md
+    orchestrator-claude.md
+    aesthetic-library.md
+    three-d-prompting.md  # router, only for 3D runs
+    three-d/              # mode files and routed 3D modules, only for 3D runs
+  tools/
+    figannot.py
+    fit_images.py
+    score_3d_candidates.py  # optional for strict 3D candidate diagnosis
+  figure_iter0.py
+  img_iter0.png
+  notes_iter0.md
+  floor_selfcheck_iter0.txt
+  review_attempts/
+    attempt_000.json
+    attempt_001.json
+  audit_view_0/
+    reference_clean.png
+    draft_fullres.png
+    composite.png
+    composite_meta.json
+    review_prompt.txt
+    aesthetic-library.md
+    three-d-prompting.md  # router, only for 3D runs
+    three-d/              # mode files and routed 3D modules, only for 3D runs
+  review_feedback_0/
+    review.json
+    annotated.png
+    notes.md
+  audit_iter0.json
+  image_fit_0.json
+  audit_iter0.stderr
+  ...
+  figure.py
+  figure.png
+  figure.pdf
+  output.png
+  floor_selfcheck_final.txt
+  selection.md
+  process.md
+  status.json
+```
 
-## Non-negotiables
+## Non-Negotiables
 
-- The reference is a **STYLE anchor, not a layout-number anchor**. The
-  Drawer must NOT copy `wspace`, `hspace`, `figsize`, `ylim` from the
-  reference's data — those recompute from OUR data's shape.
+- The reference is a style anchor, not a layout-number anchor — but the chart type
+  and signature motifs ARE style, not layout numbers. Reproduce them.
+- Preserve the source's signature visual motifs — chart type, colorbars, shaded/error
+  bands, error bars, streamline fields, stacked/offset construction, insets. Dropping
+  or flattening one is a fidelity failure, not a simplification. Only the data values
+  and labels change to match `data.txt`.
 - `inputs/reference_raw.png` is the preserved upload; `inputs/reference_clean.png`
   is the Stage-0 crop used for L1 measurement.
-- Every visual choice traces to **L1** (reference image) or **L2**
-  (`references/aesthetic-library.md`). **L3** ("I think it would look
-  better") is banned.
-- The Reviewer's audit view contains ONLY reference + draft + L2 library +
-  optional 3D insert + prior audit. NEVER stage `data.txt` or drawer notes
-  into it. Vision-only audit preserves reviewer independence.
-- Pre-create all directories before dispatching subagents; subagents only
-  Write into existing dirs.
-- Iter N>0 Drawer must edit the prior iter's `.py` incrementally (copy →
-  edit copy), not rewrite from scratch. All prior iters' artifacts must
-  remain intact in workdir.
-- Final script is self-contained (inline DATA SECTOR) with
-  `matplotlib.rcParams['pdf.fonttype'] = 42`.
-
-## Bundled resources
-
-- `references/aesthetic-library.md` — L2 convention library (~900 lines).
-  Read by both Drawer and Reviewer per iter. Versioned independently of the
-  agent prompts because the library iterates faster.
-- `references/three-d-prompting.md` — conditional 3D L2 insert router. Stage
-  and pass it only when the reference is visibly 3D or the data requires 3D
-  encoding.
-- `references/three-d/` — 3D mode files plus routed modules for core gates,
-  surfaces, marks/panels, strict scorecards, and repair feedback.
-- `scripts/score_3d_candidates.py` — optional 3D strict-reproduction helper for
-  diagnosing rendered camera/aspect/layout candidates against the L1 reference.
-- `references/iter-loop-spec.md` — full per-step orchestration spec
-  (staging commands, dispatch briefs, JSON parsing, drift calc, fallback).
-
-## Bundled subagents
-
-- `figure-preprocessor` — Stage-0 reference crop role.
-- `figure-illustrator` — Drawer role.
-- `figure-critic` — Reviewer role.
-
-Source: `.claude/agents/figure-{preprocessor,illustrator,critic}.md`
-(project-level) or `~/.claude/agents/figure-{preprocessor,illustrator,critic}.md`
-(user-level after
-`scripts/install_claude_skill.py`).
+- Every visual choice must be grounded in L1 (reference image) or L2
+  (`references/aesthetic-library.md`); L3 opinion is disallowed.
+- Do not modify a property on the Reviewer preserve list outside its L1/L2 class.
+- Do not expose `data.txt` or source code to the Reviewer audit view.
+- Keep the final script self-contained and set `plt.rcParams["pdf.fonttype"] = 42`.

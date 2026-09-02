@@ -1,17 +1,17 @@
 """figcopy_runner — backend-agnostic runners that drive the figcopy
 loop and produce iter files into a workdir.
 
-See ``interface.py`` for the abstract contract. Phase 2 ships:
+See ``interface.py`` for the abstract contract. The package ships:
 
 - :class:`MockRunner` — synthesizes plausible iter files into a
-  workdir on a timer; default backend during phase 2 dev. One mock
+  workdir on a timer for offline UI development. One mock
   serves both real backends because the contract they all honor
   (write iter files + status sidecar atomically) is identical.
-- :class:`CodexRunner` — Phase 3 stub for the codex CLI backend.
-- :class:`ClaudeRunner` — Phase 3 stub for the claude CLI backend.
+- :class:`CodexRunner` — launches the installed Codex FigMirror skill.
+- :class:`ClaudeRunner` — launches the installed Claude Code FigMirror skill.
 
-Phase 3 fills in CodexRunner + ClaudeRunner; the swap is a one-line
-change in ``figcopy_serve.run_workspace``.
+``figcopy_serve.run_workspace`` registers the real backends whose CLIs are
+available on the current host and routes each run to its recorded backend.
 """
 
 from __future__ import annotations

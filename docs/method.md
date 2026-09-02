@@ -21,7 +21,7 @@ The output is a self-contained matplotlib script plus PNG and PDF renders. The f
 Each run has four stages:
 
 1. **Data echo and confirmation.** The agent normalizes the paste, reports rows, columns, missing values, and a sample row, then records the parse in `data_echo.md`.
-2. **Drawer / Reviewer iterations.** The Drawer writes matplotlib code and renders `img_iter<N>.png`. The Reviewer audits a fresh view containing only the reference, draft, aesthetic library, and prior audit.
+2. **Drawer / Reviewer iterations.** The Drawer writes matplotlib code and renders `img_iter<N>.png`. The Reviewer audits a fresh view containing only the staged reference, draft, aesthetic library, fixed diagnostics, and optional 3D material.
 3. **User gate.** When style transfer is good enough, the run can move from style matching into detail-level tweaks.
 4. **Final export.** The chosen iteration becomes `figure.py`, `figure.png`, and `figure.pdf`.
 
@@ -37,7 +37,7 @@ FigMirror is packaged as prompt assets plus lightweight Python runners:
 |---|---|---|
 | Drawer | `.codex/skills/figmirror/references/drawer.md` and Claude skill equivalents | Writes matplotlib code and draft images. |
 | Reviewer | `.codex/skills/figmirror/references/reviewer.md` and Claude skill equivalents | Performs fresh-context visual audits and emits strict JSON. |
-| Orchestrator | `.codex/skills/figmirror/references/orchestrator-codex.md` and runner code | Applies stop rules, carries anchors, and finalizes outputs. |
+| Orchestrator | `orchestrator-codex.md` / `orchestrator-claude.md` in the respective skill bundle, plus runner code | Dispatches the named roles, applies stop rules, carries anchors, and finalizes outputs. |
 | Aesthetic library | `references/aesthetic-library.md` in each skill bundle | Stores reusable paper-figure conventions. |
 | 3D insert | `.codex/skills/figmirror/references/three-d-prompting.md` and `references/three-d/*.md` | Adds gated 3D routing, mode rules, scorecards, and repair feedback. |
 | Web UI | `scripts/figcopy_serve.py` and `scripts/figcopy_static/` | Stages runs, shows trajectories, and supports refinement. |
@@ -74,8 +74,8 @@ The strongest use case is a researcher with a good paper figure in mind and mess
 | `scripts/README_figcopy_serve.md` | Full web UI workflow, endpoints, and backend flags. |
 | `.codex/skills/figmirror/SKILL.md` | Codex skill entry point and artifact contract. |
 | `.codex/skills/figmirror/references/` | Codex runtime prompts, aesthetic library, and gated 3D insert modules. |
-| `.claude/skills/figmirror/SKILL.md` | Claude Code skill entry point and bundled subagent path. |
-| `.claude/agents/figure-{preprocessor,illustrator,critic}.md` | Claude subagent prompt bodies for the loop roles. |
+| `.claude/skills/figmirror/SKILL.md` | Claude Code skill entry point and synchronous `Task` orchestration contract. |
+| `.claude/agents/figmirror-{drawer,reviewer}.md` | Claude named-role prompt bodies; Stage 0 comes from the skill's `references/preprocessor.md`. |
 | `resources/prompts/` | Development and historical consolidated prompt bundles; not the release runtime path. |
 | `openspec/sessions/phase0-spike-and-product-principles.md` | Phase 0 spike notes and product-positioning principles. |
 | `openspec/changes/phase2-webui-workpanel/` | Web UI design and behavior spec. |

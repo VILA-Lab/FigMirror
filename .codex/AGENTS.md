@@ -13,7 +13,8 @@ camera-ready PDF and a self-contained matplotlib script.
 | `.codex/skills/figmirror/references/*.md` | Codex runtime prompt files: Preprocessor, Drawer, Reviewer, Orchestrator, and Aesthetic library |
 | `.codex/agents/figmirror-{drawer,reviewer}.toml` | Codex custom-agent role boundaries used by the role-separated algorithm |
 | `.codex/skills/figmirror/references/three-d-prompting.md` + `references/three-d/*.md` | Optional 3D insert, loaded only by the 3D gate |
-| `.claude/skills/figmirror/SKILL.md` + `.claude/agents/figure-{preprocessor,illustrator,critic}.md` | Claude runtime skill + subagent prompt files |
+| `.claude/skills/figmirror/SKILL.md` + `.claude/agents/figmirror-{drawer,reviewer}.md` | Claude runtime skill + named loop roles; Stage 0 uses the bundled preprocessor prompt as a bounded general task |
+| `scripts/figcopy_runner/{codex,claude}.py` | Web UI adapters that launch the installed skills and inject the repository Python command |
 | `resources/prompts/figure-style-copier.md` | Development/historical consolidated Claude prompt bundle; release/runtime routes through the skill files |
 | `resources/prompts/figure-style-copier-codex.md` | Development/historical consolidated Codex prompt bundle; release/runtime routes through `.codex/skills/.../references/*.md` |
 | `openspec/changes/phase0-style-transfer-loop/` | Design decisions (design.md), task tracker (tasks.md), proposal (proposal.md) |
@@ -45,8 +46,9 @@ camera-ready PDF and a self-contained matplotlib script.
 - **Aesthetic library and gated inserts are the living layers.** Keep runtime
   behavior in the structured skill files, not in consolidated prompt bundles.
 
-## Current status (as of 2026-07-01)
+## Current status (as of 2026-09-02)
 
 FigMirror ships as structured Claude Code and Codex skills. The Codex path uses
 named Drawer/Reviewer roles plus deterministic annotation tooling for bbox-based
-review feedback.
+review feedback. The Claude path uses the same role split and decision state
+machine through Claude Code's synchronous `Task` transport.

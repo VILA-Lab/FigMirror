@@ -159,6 +159,18 @@ def reviewer_protocol_failure_reason(workdir: Path) -> Optional[str]:
     when that nested reviewer launch fails. Treat those runs as failed
     instead of letting optimistic self-audits mark them shipped.
     """
+    failure_marker = workdir / "REVIEWER_FAILED"
+    if failure_marker.is_file():
+        try:
+            detail = failure_marker.read_text(
+                encoding="utf-8", errors="ignore"
+            ).strip()
+        except OSError:
+            detail = ""
+        detail = " ".join(detail.split())[:500]
+        suffix = f": {detail}" if detail else ""
+        return f"reviewer failed closed{suffix}"
+
     for p in sorted(workdir.glob("audit_iter*.stderr")):
         try:
             text = p.read_text(encoding="utf-8", errors="ignore")
@@ -171,6 +183,95 @@ def reviewer_protocol_failure_reason(workdir: Path) -> Optional[str]:
                 "audit JSON was not independently produced"
             )
     return None
+
+
+def iteration_cap_failure_reason(
+    iterations: list[int], max_iters: int
+) -> Optional[str]:
+    """Return a terminal failure when a runner produced an out-of-cap draft."""
+    breached = [n for n in iterations if n >= max_iters]
+    if not breached:
+        return None
+    return (
+        f"iteration cap exceeded: found img_iter{min(breached)}.png with "
+        f"max_iters={max_iters}"
+    )
+
+
+def terminal_review_decision(workdir: Path) -> Optional[dict]:
+    """Return the final validated review action needed for runner fallback.
+
+    The model process may exit after the deterministic helper commits `ship` or
+    `stop_at_cap` but before it copies the selected image to `figure.png`. Runner
+    fallback is allowed only for that narrow state; a provisional
+    `review_same_draft`, an actionable `draw`, or an invalid retry is not a ship
+    decision.
+    """
+    attempts_dir = workdir / "review_attempts"
+    paths = sorted(attempts_dir.glob("attempt_*.json"))
+    if not paths:
+        return None
+    for index, path in enumerate(paths):
+        if path.name != f"attempt_{index:03d}.json":
+            return None
+    try:
+        attempt = json.loads(paths[-1].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(attempt, dict) or attempt.get("state") != "committed":
+        return None
+    if attempt.get("attempt") != len(paths) - 1:
+        return None
+
+    action = attempt.get("action")
+    classification = attempt.get("classification")
+    iter_idx = attempt.get("iter")
+    min_reviews = attempt.get("min_reviews")
+    max_iters = attempt.get("max_iters")
+    valid_count = attempt.get("valid_review_count")
+    ints = (iter_idx, min_reviews, max_iters, valid_count)
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in ints):
+        return None
+    if min_reviews < 1 or max_iters < 1 or not 0 <= iter_idx < max_iters:
+        return None
+
+    if action == "ship":
+        if classification != "all_clear" or valid_count < min_reviews:
+            return None
+    elif action == "stop_at_cap":
+        if (
+            classification != "actionable"
+            or iter_idx != max_iters - 1
+            or valid_count < 1
+        ):
+            return None
+    else:
+        return None
+
+    draft = workdir / f"img_iter{iter_idx}.png"
+    recorded_sha = attempt.get("draft_sha256")
+    if (
+        not draft.is_file()
+        or not isinstance(recorded_sha, str)
+        or re.fullmatch(r"[0-9a-f]{64}", recorded_sha) is None
+    ):
+        return None
+    try:
+        digest = hashlib.sha256(draft.read_bytes()).hexdigest()
+    except OSError:
+        return None
+    if digest != recorded_sha:
+        return None
+    for canonical_review in (
+        workdir / f"audit_iter{iter_idx}.json",
+        workdir / f"review_feedback_{iter_idx}" / "review.json",
+    ):
+        try:
+            if not canonical_review.is_file() or canonical_review.stat().st_size == 0:
+                return None
+        except OSError:
+            return None
+    return {"action": action, "iter": iter_idx}
 
 
 # ─────────────────────────── sessions sidecar ────────────────────────
@@ -1318,15 +1419,15 @@ class Runner(Protocol):
     """
 
     def start(self, workdir: Path, *, prompt: str = "",
-              max_iters: int = 6, auto: bool = False) -> str:
+              max_iters: int = 5, auto: bool = False) -> str:
         """Stage a run; return the run id (``workdir.name``).
 
         Async — returns immediately. A background thread / subprocess
         produces iter files into ``workdir`` over time. Caller observes
         progress via the status sidecar + (Phase 3) the event bus.
-        ``auto=True`` means the prompt should ignore ``max_iters`` and
-        keep iterating until the Reviewer returns ``ship`` or a real
-        blocker occurs.
+        ``auto=True`` means the runner follows deterministic review actions
+        without pausing until the Reviewer returns ``ship``, a real blocker
+        occurs, or the hard ``max_iters`` Drawer cap is reached.
         """
         ...
 

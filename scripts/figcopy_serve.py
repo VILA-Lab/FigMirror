@@ -1818,13 +1818,9 @@ def render_landing(
         "<textarea name='prompt' placeholder='e.g. use a dark Nature-style "
         "palette, prefer thicker axis lines'></textarea></label>",
 
-        # max_iters + auto: mutually exclusive controls. The `auto`
-        # checkbox tells the runner to keep iterating until the
-        # reviewer ships (ignoring max_iters); when checked, JS in
-        # workspace.js disables the max_iters input (greys it out)
-        # so the UI surfaces the exclusion. Both controls carry ids
-        # so the toggle handler finds them. Layout: input and the
-        # `[☐] auto until shipped` checkbox sit side-by-side in
+        # max_iters is always a hard Drawer cap. The `auto` checkbox asks the
+        # runner to follow deterministic review actions without pausing until
+        # ship or that cap. Layout: input and the checkbox sit side-by-side in
         # `.iters-row` — vertically centered against each other —
         # so the two interactive "boxes" line up at the same y. The
         # top-level wrapper is a `div` (not `label`) so we can put a
@@ -1834,10 +1830,10 @@ def render_landing(
         "<label for='run-max-iters'>Max iterations</label>"
         "<div class='iters-row'>"
         "<input type='number' id='run-max-iters' name='max_iters' "
-        "value='6' min='1' max='20'>"
+        "value='5' min='1' max='20'>"
         "<label class='checkbox' for='run-auto-cb'>"
         "<input type='checkbox' id='run-auto-cb' name='auto' value='1'>"
-        "<span>auto until shipped</span>"
+        "<span>auto-continue to ship or cap</span>"
         "</label>"
         "</div>"
         "</div>",
@@ -2021,9 +2017,9 @@ def create_run(
 
     prompt = form.get("prompt", "") if isinstance(form.get("prompt"), str) else ""
     try:
-        max_iters = int(form.get("max_iters", "6") or "6")
+        max_iters = int(form.get("max_iters", "5") or "5")
     except (TypeError, ValueError):
-        max_iters = 6
+        max_iters = 5
     max_iters = max(MIN_MAX_ITERS, min(MAX_MAX_ITERS, max_iters))
     auto_flag = bool(form.get("auto"))  # checkbox sends "1" if checked, missing if not
     import datetime
@@ -2231,7 +2227,7 @@ def run_workspace(args) -> int:
                     # Don't fail the whole request — the workdir is already
                     # staged; surface the error in logs and the trajectory
                     # status banner. (User can retry by re-running the form
-                    # or driving codex against the workdir manually.)
+                    # or driving an agent skill against the workdir manually.)
                     print(f"[runner] start({run_dir.name}) failed: {e}",
                           file=sys.stderr)
                 # If the request was made via fetch() (AJAX), return JSON
@@ -3031,8 +3027,8 @@ def main() -> int:
                     help="target HF Space repo (default: %(default)s)")
     ap.add_argument("--no-watch", action="store_true",
                     help="disable interactive features (live refresh, lightbox)")
-    # Phase 3: runner backend selection. Default codex; mock for
-    # offline dev. --mock kept as a deprecated alias for --backend mock.
+    # Runner backend selection. Default codex; mock for offline dev.
+    # --mock is kept as a deprecated alias for --backend mock.
     ap.add_argument("--backend",
                     choices=("mock", "codex", "claude"),
                     default=None,

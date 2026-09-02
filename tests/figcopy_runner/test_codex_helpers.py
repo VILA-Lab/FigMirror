@@ -7,6 +7,10 @@ fragile part of the runner.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import shlex
+
 import pytest
 
 from figcopy_runner import codex as codex_mod
@@ -17,6 +21,7 @@ from figcopy_runner.codex import (
     RefineInFlight,
     _parse_iter_n_from_path,
     _parse_jsonl_line,
+    _pick_finalize_iter,
     _publish_codex_event,
     _next_refine_index,
     _accumulated_rcparams_for_set,
@@ -25,7 +30,9 @@ from figcopy_runner.event_bus import EventBus
 from figcopy_runner.interface import (
     compute_set_id,
     ensure_reference_raw,
+    iteration_cap_failure_reason,
     reviewer_protocol_failure_reason,
+    terminal_review_decision,
 )
 
 
@@ -42,35 +49,31 @@ def test_parse_iter_n_misses_non_iter_files():
 
 def test_loop_policy_respects_max_iters_by_default():
     policy = codex_mod._format_loop_policy(max_iters=4, auto=False)
-    assert "Maximum iterations: 4" in policy
+    assert "Maximum Drawer iterations: 4" in policy
     assert "N = 0..3" in policy
     assert "Auto-until-shipped" not in policy
 
 
-def test_loop_policy_auto_ignores_default_cap_for_both_backends():
+def test_loop_policy_auto_respects_hard_cap_for_both_backends():
     codex_policy = codex_mod._format_loop_policy(max_iters=4, auto=True)
     claude_policy = claude_mod._format_loop_policy(max_iters=4, auto=True)
     assert codex_policy == claude_policy
-    assert "Auto-until-shipped is enabled" in codex_policy
-    assert "Maximum iterations" not in codex_policy
+    assert "Automatic continuation is enabled" in codex_policy
+    assert "Maximum Drawer iterations: 4" in codex_policy
+    assert "iteration 4 or later" in codex_policy
+    assert "Ignore the default iteration cap" not in codex_policy
     assert "`ship`" in codex_policy
 
 
 def test_reference_preprocessor_prompt_synced_between_backends(monkeypatch, tmp_path):
-    """Both backends must hand the model the SAME prompt body — no
-    YAML frontmatter, no leading ``---`` fence. The Claude loader
-    strips frontmatter (Adv #1, PR-27 round 1) so the assertion is
-    exact equality with no munging here.
-    """
+    """Both active skill bundles ship the same Stage-0 prompt body."""
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "no-codex-home"))
-    monkeypatch.setenv("CLAUDE_HOME", str(tmp_path / "no-claude-home"))
+    monkeypatch.setenv(
+        "CLAUDE_CONFIG_DIR", str(tmp_path / "no-claude-config")
+    )
+    monkeypatch.delenv("CLAUDE_HOME", raising=False)
     codex_prompt = codex_mod._load_reference_preprocessor_prompt()
     claude_prompt = claude_mod._load_reference_preprocessor_prompt()
-    assert not claude_prompt.startswith("---"), (
-        "Claude preprocessor loader must strip YAML frontmatter so "
-        "the model is not handed `tools:`/`model:` lines as part of "
-        "the prompt body."
-    )
     assert codex_prompt == claude_prompt
     assert "reference_raw.png" in codex_prompt
     assert "reference_crop_check.png" in codex_prompt
@@ -106,8 +109,10 @@ def test_runner_prompts_prefer_installed_skill_paths(monkeypatch, tmp_path):
     claude_skill.mkdir(parents=True)
     claude_agents.mkdir(parents=True)
     (claude_skill / "SKILL.md").write_text("---\nname: figmirror\n---\n")
-    (claude_agents / "figure-preprocessor.md").write_text("prompt")
-    monkeypatch.setenv("CLAUDE_HOME", str(claude_home))
+    (claude_agents / "figmirror-drawer.md").write_text("prompt")
+    (claude_agents / "figmirror-reviewer.md").write_text("prompt")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+    monkeypatch.delenv("CLAUDE_HOME", raising=False)
 
     codex_prompt = codex_mod._STEP1_PROMPT_TEMPLATE.format(
         workdir="/tmp/run",
@@ -128,6 +133,109 @@ def test_runner_prompts_prefer_installed_skill_paths(monkeypatch, tmp_path):
     assert str(codex_skill.resolve()) in codex_prompt
     assert str(claude_skill.resolve()) in claude_prompt
     assert str(claude_agents.resolve()) in claude_prompt
+    assert "orchestrator-claude.md" in claude_prompt
+    assert "figure-critic" not in claude_prompt
+
+
+def test_runner_env_injects_project_python_command(monkeypatch):
+    monkeypatch.delenv("FIGMIRROR_PYTHON_CMD", raising=False)
+    for module in (codex_mod, claude_mod):
+        env = module._uv_env()
+        assert env["FIGMIRROR_PYTHON_CMD"] == shlex.join(
+            module._uv_cmd("python")
+        )
+
+
+def test_runner_env_overrides_ambient_python_command(monkeypatch):
+    monkeypatch.setenv("FIGMIRROR_PYTHON_CMD", "/opt/figmirror/python")
+    assert claude_mod._uv_env()["FIGMIRROR_PYTHON_CMD"] == shlex.join(
+        claude_mod._uv_cmd("python")
+    )
+
+
+def test_claude_config_dir_precedes_compat_home(monkeypatch, tmp_path):
+    config_dir = tmp_path / "claude-config"
+    compat_home = tmp_path / "claude-home"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("CLAUDE_HOME", str(compat_home))
+    assert claude_mod._claude_home() == config_dir
+
+
+def test_claude_env_maps_compat_home_to_native_config_dir(monkeypatch, tmp_path):
+    compat_home = tmp_path / "claude-home"
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("CLAUDE_HOME", str(compat_home))
+    assert claude_mod._uv_env()["CLAUDE_CONFIG_DIR"] == str(compat_home)
+
+
+def test_iteration_cap_failure_reason():
+    assert iteration_cap_failure_reason([0, 1, 2], 3) is None
+    assert iteration_cap_failure_reason([0, 3, 4], 3) == (
+        "iteration cap exceeded: found img_iter3.png with max_iters=3"
+    )
+
+
+def _stage_terminal_attempt(tmp_path, *, action: str, valid_count: int = 2):
+    draft = tmp_path / "img_iter0.png"
+    draft.write_bytes(b"draft")
+    (tmp_path / "audit_iter0.json").write_text("{}")
+    feedback = tmp_path / "review_feedback_0"
+    feedback.mkdir()
+    (feedback / "review.json").write_text("{}")
+    attempts = tmp_path / "review_attempts"
+    attempts.mkdir()
+    classification = (
+        "all_clear" if action in {"ship", "review_same_draft"} else "actionable"
+    )
+    (attempts / "attempt_000.json").write_text(json.dumps({
+        "state": "committed",
+        "attempt": 0,
+        "iter": 0,
+        "classification": classification,
+        "action": action,
+        "valid_review_count": valid_count,
+        "min_reviews": 2,
+        "max_iters": 1,
+        "draft_sha256": hashlib.sha256(b"draft").hexdigest(),
+    }))
+
+
+def test_terminal_review_decision_rejects_provisional_review(tmp_path):
+    _stage_terminal_attempt(tmp_path, action="review_same_draft", valid_count=1)
+    assert terminal_review_decision(tmp_path) is None
+
+
+def test_terminal_review_decision_accepts_committed_ship(tmp_path):
+    _stage_terminal_attempt(tmp_path, action="ship")
+    assert terminal_review_decision(tmp_path) == {"action": "ship", "iter": 0}
+
+
+def test_terminal_review_decision_accepts_stop_at_cap(tmp_path):
+    _stage_terminal_attempt(tmp_path, action="stop_at_cap")
+    assert terminal_review_decision(tmp_path) == {
+        "action": "stop_at_cap",
+        "iter": 0,
+    }
+
+
+def test_cap_selection_prefers_close_over_later_off(tmp_path):
+    (tmp_path / "audit_iter0.json").write_text(json.dumps({
+        "quality_floor": {"passed": True},
+        "fidelity": {"verdict": "close"},
+    }))
+    (tmp_path / "audit_iter1.json").write_text(json.dumps({
+        "quality_floor": {"passed": True},
+        "fidelity": {"verdict": "off"},
+    }))
+    assert _pick_finalize_iter(tmp_path, [0, 1]) == 0
+
+
+def test_cap_selection_refuses_when_no_close_candidate_exists(tmp_path):
+    (tmp_path / "audit_iter0.json").write_text(json.dumps({
+        "quality_floor": {"passed": False},
+        "fidelity": {"verdict": "off"},
+    }))
+    assert _pick_finalize_iter(tmp_path, [0]) is None
 
 
 def test_ensure_reference_raw_preserves_legacy_clean_upload(tmp_path):
@@ -269,6 +377,14 @@ def test_reviewer_protocol_failure_ignores_empty_stderr(tmp_path):
     (tmp_path / "audit_iter0.stderr").write_text("")
 
     assert reviewer_protocol_failure_reason(tmp_path) is None
+
+
+def test_reviewer_protocol_failure_detects_fail_closed_marker(tmp_path):
+    (tmp_path / "REVIEWER_FAILED").write_text("two invalid reviews\n")
+
+    assert reviewer_protocol_failure_reason(tmp_path) == (
+        "reviewer failed closed: two invalid reviews"
+    )
 
 
 # ── PR #25 round-3 regression: lock release on marker-write failure ──

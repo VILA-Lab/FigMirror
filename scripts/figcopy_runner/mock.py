@@ -263,7 +263,7 @@ class MockRunner:
     # --- public Runner interface ---------------------------------------
 
     def start(self, workdir: Path, *, prompt: str = "",
-              max_iters: int = 6, auto: bool = False) -> str:
+              max_iters: int = 5, auto: bool = False) -> str:
         workdir = workdir.resolve()
         with self._lock:
             existing = self._states.get(workdir)
@@ -546,7 +546,7 @@ class MockRunner:
             self._set_state(workdir, "failed", None)
             return
 
-        n = len(mock_iter_dirs) if auto else min(max_iters, len(mock_iter_dirs))
+        n = min(max_iters, len(mock_iter_dirs))
         if n == 0:
             self._set_state(workdir, "failed", None)
             return

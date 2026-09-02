@@ -3,10 +3,10 @@
 
 Prepares a workdir from your reference image + data file, then launches the
 view-only `figcopy_serve.py` viewer in the background so you can watch iters
-appear live as the Codex skill writes them.
+appear live as the Codex or Claude Code skill writes them.
 
-Does not invoke the Codex skill itself: you still drive FigMirror from your
-Codex session by pointing the registered `figmirror` skill id at the
+Does not invoke the agent skill itself: you still drive FigMirror from a Codex
+or Claude Code session by pointing the registered `figmirror` skill id at the
 prepared workdir. This launcher's only job is to remove the manual "create dir,
 copy inputs, start viewer" friction.
 
@@ -16,7 +16,7 @@ Usage:
         --data path/to/data.txt \\
         --workdir /tmp/myrun
 
-    # then in a Codex session:
+    # then in a Codex or Claude Code session:
     #   /figmirror <workdir=/tmp/myrun>
 
 Flags are passed through to figcopy_serve.py where applicable
@@ -109,7 +109,7 @@ def main() -> int:
 
     print("─" * 60)
     print("Now drive FigMirror against the same workdir, e.g. in your")
-    print("Codex session:")
+    print("Codex or Claude Code session:")
     print()
     print(f"    /figmirror  workdir={workdir}")
     print()

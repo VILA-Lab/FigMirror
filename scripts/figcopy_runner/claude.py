@@ -9,12 +9,10 @@ Architecture differences vs CodexRunner:
 - **Single subprocess per main loop turn**: the Claude skill at
   ``~/.claude/skills/figmirror/`` is designed so the CALLING
   thread is the orchestrator and uses Claude Code's native ``Task``
-  tool to dispatch ``figure-preprocessor`` (Stage 0),
-  ``figure-illustrator`` (Drawer), and ``figure-critic`` (Reviewer)
-  subagents. The runner also performs a bounded Stage-0 preprocess pass
-  before the main loop, so the main loop starts with a clean L1 crop. By
-  contrast, CodexRunner's ``orchestrator-codex.md`` shells out a
-  separate ``codex exec`` for the reviewer.
+  tool to dispatch the named ``figmirror-drawer`` and
+  ``figmirror-reviewer`` subagents. The runner also performs a bounded
+  Stage-0 preprocess pass before the main loop, so the main loop starts with a
+  clean L1 crop.
 
 - **stream-json wire format**: Claude emits
   ``{"type":"system",...}`` / ``{"type":"assistant","message":{...}}``
@@ -41,6 +39,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -61,12 +60,14 @@ from .interface import (
     clear_refine_reservation,
     compute_set_id,
     ensure_reference_raw,
+    iteration_cap_failure_reason,
     mark_refine_in_flight,
     next_refine_index,
     read_sessions,
     read_status_sidecar,
     reserve_refine_index,
     reviewer_protocol_failure_reason,
+    terminal_review_decision,
     write_sessions,
 )
 from .refine_completion import (
@@ -109,6 +110,9 @@ def _uv_env() -> dict[str, str]:
     # export UV_CACHE_DIR themselves; setdefault preserves it.
     # `.artifacts/` is gitignored.
     env.setdefault("UV_CACHE_DIR", str(_REPO_ROOT / ".artifacts" / "uv-cache"))
+    env["FIGMIRROR_PYTHON_CMD"] = shlex.join(_uv_cmd("python"))
+    if "CLAUDE_CONFIG_DIR" not in env and env.get("CLAUDE_HOME"):
+        env["CLAUDE_CONFIG_DIR"] = env["CLAUDE_HOME"]
     return env
 
 
@@ -159,7 +163,7 @@ class ClaudeRunner:
     # ───── public Runner Protocol ─────────────────────────────────────
 
     def start(self, workdir: Path, *, prompt: str = "",
-              max_iters: int = 6, auto: bool = False) -> str:
+              max_iters: int = 5, auto: bool = False) -> str:
         """Kick off a Stage-1 run on the claude backend.
 
         Returns immediately. The actual ``claude --print`` subprocess
@@ -365,7 +369,7 @@ class ClaudeRunner:
         self._spawn_orchestrator(workdir, prompt, max_iters, auto)
 
     def _run_reference_preprocess_pass(self, workdir: Path) -> bool:
-        """Run the figure-preprocessor prompt before the main loop."""
+        """Run the bundled Stage-0 preprocessor prompt before the main loop."""
         raw = ensure_reference_raw(workdir)
         clean = workdir / "inputs" / "reference_clean.png"
         check = workdir / "inputs" / "reference_crop_check.png"
@@ -390,11 +394,12 @@ class ClaudeRunner:
 
         full_prompt = (
             "Use the FigMirror Stage-0 reference preprocessor for this task.\n"
-            "If you inspect FigMirror SKILL.md, bundled references, or agents, use "
-            "these user-level Claude Code install paths and resolve relative "
-            "paths under them:\n\n"
+            "If you inspect FigMirror SKILL.md or bundled references, use this "
+            "user-level Claude Code skill path and resolve relative paths under "
+            "it:\n\n"
             f"    FIGMIRROR_SKILL_DIR = {_claude_skill_dir_for_prompt()}\n"
-            f"    FIGMIRROR_AGENTS_DIR = {_claude_agents_dir_for_prompt()}\n\n"
+            "\nThe runner has injected `FIGMIRROR_PYTHON_CMD`; use that exact "
+            "command for any Python invocation.\n\n"
             f"{prompt}\n\n---\n\n"
             f"Run Stage 0 reference preprocessing in this workdir:\n"
             f"{workdir}\n\n"
@@ -870,27 +875,46 @@ class ClaudeRunner:
             else:
                 final = "failed"
 
-            # Auto-finalize fallback: if claude exited non-zero but
-            # we have at least one iter PNG, promote the latest
-            # quality-floor-passing iter as figure.png so a "usable"
-            # run isn't reported as failed. Use CodexRunner's
-            # _pick_finalize_iter so both backends ship the SAME iter
-            # for a given on-disk audit set — picking
-            # disk_iters[-1] would silently ship an audit-failing
-            # newer iter even when an earlier passing one exists.
+            # Terminal-action fallback: the deterministic gate may commit
+            # `ship` or `stop_at_cap` immediately before the model process exits
+            # without copying figure.png. Only that ledger-backed state may be
+            # promoted here; provisional or invalid reviews remain failed.
             ship_path = workdir / "figure.png"
             disk_iters = sorted(
                 n
                 for p in workdir.glob("img_iter*.png")
                 if (n := _parse_iter_n_from_path(p.name)) is not None
             )
+            cap_failure = iteration_cap_failure_reason(disk_iters, max_iters)
+            terminal_review = terminal_review_decision(workdir)
+            failure_reason = protocol_failure or cap_failure
+            cap_choice = None
             if (
-                not protocol_failure
-                and final != "shipped"
+                failure_reason is None
+                and terminal_review is not None
+                and terminal_review["action"] == "stop_at_cap"
+            ):
+                cap_choice = _pick_finalize_iter(workdir, disk_iters)
+                if cap_choice is None:
+                    failure_reason = (
+                        "hard cap reached without a floor-passing close candidate"
+                    )
+            if (
+                failure_reason is None
+                and final != "cancelled"
+                and terminal_review is None
+            ):
+                failure_reason = "orchestrator exited before a terminal review decision"
+            if (
+                not failure_reason
                 and not ship_path.exists()
                 and disk_iters
+                and terminal_review is not None
             ):
-                chosen = _pick_finalize_iter(workdir, disk_iters)
+                if terminal_review["action"] == "ship":
+                    chosen = int(terminal_review["iter"])
+                else:
+                    chosen = int(cap_choice)
                 src = workdir / f"img_iter{chosen}.png"
                 try:
                     data = src.read_bytes()
@@ -903,8 +927,12 @@ class ClaudeRunner:
                         sel_tmp.write_text(
                             f"# Selection notes\n\n"
                             f"Selected: **iter {chosen}** "
-                            f"(runner finalize after agent exited "
+                            f"(runner finalize after terminal "
+                            f"{terminal_review['action']} decision; agent exited "
                             f"early; exit_code={exit_code}).\n\n"
+                            f"The deterministic review ledger authorized "
+                            f"iter {chosen}; Claude exited before completing "
+                            f"the final artifact copy.\n\n"
                             f"_Auto-generated by ClaudeRunner._\n",
                             encoding="utf-8",
                         )
@@ -917,7 +945,7 @@ class ClaudeRunner:
                         file=sys.stderr,
                     )
 
-            if protocol_failure and final != "cancelled":
+            if failure_reason and final != "cancelled":
                 final = "failed"
 
             with self._iter_state_lock:
@@ -928,11 +956,11 @@ class ClaudeRunner:
                 workdir,
                 state=final,
                 current_iter=current_iter,
-                reason=protocol_failure,
+                reason=failure_reason,
             )
             bus.publish(workdir, slot, events.TurnEndEvent(data={
                 "status": "completed" if final == "shipped" else final,
-                **({"reason": protocol_failure} if protocol_failure else {}),
+                **({"reason": failure_reason} if failure_reason else {}),
             }))
 
     def _reader_refine(self, workdir: Path, slot: str, set_id: str,
@@ -1163,60 +1191,36 @@ def _format_loop_policy(*, max_iters: int, auto: bool) -> str:
     if auto:
         return (
             "Loop policy for this run:\n"
-            "- Auto-until-shipped is enabled. Ignore the default iteration cap "
-            "and keep running Drawer/Reviewer iterations until the Reviewer "
-            "returns `ship`.\n"
-            "- Continue through `close` and `off` verdicts when there is a "
-            "clear next revision. Stop only for a true blocker, cancellation, "
-            "or a protocol failure you cannot repair."
+            "- Automatic continuation is enabled: follow each deterministic "
+            "review action until `ship` or the hard Drawer cap.\n"
+            f"- Maximum Drawer iterations: {max_iters}. Never create iteration "
+            f"{max_iters} or later."
         )
     return (
         "Loop policy for this run:\n"
-        f"- Maximum iterations: {max_iters}. Iterate N = 0..{max_iters - 1} "
+        f"- Maximum Drawer iterations: {max_iters}. Iterate N = 0..{max_iters - 1} "
         "unless the Reviewer returns `ship` earlier."
     )
 
 
 def _load_reference_preprocessor_prompt() -> str:
-    """Load the Stage-0 preprocessor prompt for the Claude backend.
-
-    The on-disk file is a Claude subagent definition with YAML
-    frontmatter (``name:`` / ``tools:`` / ``model:`` between two
-    ``---`` fences). When piped through ``claude --print`` directly
-    the model sees that frontmatter as instructions — the
-    ``tools: Read, Write, Edit, Bash`` line in particular implies a
-    restriction the top-level ``--permission-mode bypassPermissions``
-    does NOT actually enforce, so leaving it in is misleading at best
-    and a quiet contract divergence at worst (Adv #1, PR-27 round 1).
-    Strip the frontmatter and return only the body, mirroring what the
-    Codex sibling at ``.codex/skills/figmirror/references/preprocessor.md``
-    already ships on disk.
-    """
-    for prompt_path in (
-        _installed_claude_agents_dir() / "figure-preprocessor.md",
-        _repo_claude_agents_dir() / "figure-preprocessor.md",
-    ):
+    """Load the Stage-0 prompt from the active Claude skill bundle."""
+    for skill_dir in (_installed_claude_skill_dir(), _repo_claude_skill_dir()):
+        prompt_path = skill_dir / "references" / "preprocessor.md"
         if prompt_path.is_file():
-            raw = prompt_path.read_text(encoding="utf-8")
-            break
-    else:
-        raise FileNotFoundError(
-            "FigMirror Claude preprocessor prompt not found in installed "
-            "Claude agents or repo fallback"
-        )
-    # Frontmatter is exactly: leading "---\n", body, "---\n", body.
-    # Anything else (no frontmatter, malformed, missing closing fence)
-    # is returned unchanged so the caller still sees something sensible.
-    if not raw.startswith("---\n"):
-        return raw
-    parts = raw.split("---\n", 2)
-    if len(parts) < 3:
-        return raw
-    return parts[2].lstrip()
+            return prompt_path.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        "FigMirror Claude preprocessor prompt not found in installed "
+        "Claude skill or repo fallback"
+    )
 
 
 def _claude_home() -> Path:
-    return Path(os.environ.get("CLAUDE_HOME") or (Path.home() / ".claude")).expanduser()
+    return Path(
+        os.environ.get("CLAUDE_CONFIG_DIR")
+        or os.environ.get("CLAUDE_HOME")
+        or (Path.home() / ".claude")
+    ).expanduser()
 
 
 def _installed_claude_skill_dir() -> Path:
@@ -1244,7 +1248,10 @@ def _claude_skill_dir_for_prompt() -> str:
 
 def _claude_agents_dir_for_prompt() -> str:
     installed = _installed_claude_agents_dir()
-    if (installed / "figure-preprocessor.md").is_file():
+    if all(
+        (installed / f"{name}.md").is_file()
+        for name in ("figmirror-drawer", "figmirror-reviewer")
+    ):
         return str(installed.resolve())
     return str(_repo_claude_agents_dir().resolve())
 
@@ -1256,8 +1263,9 @@ Use `$figmirror` for this task from this user-level Claude Code install:
     FIGMIRROR_AGENTS_DIR = {agents_dir}
 
 The skill is registered in your available-skills list; invoke it by following
-that SKILL.md and the iter-loop spec it points to. If project-local skill or
-agent files are also visible, use these user-level paths for this run.
+that SKILL.md and `references/orchestrator-claude.md`. If project-local skill or
+agent files are also visible, use these user-level paths for this run. Dispatch
+the Drawer and Reviewer only through the named agents in FIGMIRROR_AGENTS_DIR.
 
 Run the skill's Drawer/Reviewer loop against this workdir:
 
@@ -1272,6 +1280,9 @@ Stage-0 reference preprocessing has already run in this runner invocation.
 Do not crop the reference again unless `inputs/reference_clean.png` is missing
 or `inputs/reference_crop_report.md` says the crop failed.
 
+The runner has injected `FIGMIRROR_PYTHON_CMD`; use it for every Python command
+as required by the skill.
+
 {loop_policy}
 
 Hard artifact limit for this run:
@@ -1279,9 +1290,9 @@ Hard artifact limit for this run:
   are never observed by the watcher.
 
 Produce iter files (figure_iter<N>.py, img_iter<N>.png,
-notes_iter<N>.md, audit_iter<N>.json) into WORKDIR. When the
-figure-critic verdict is `ship`, promote that iter's image to
-WORKDIR/figure.png and write a selection.md describing the chosen iter.
+notes_iter<N>.md, floor_selfcheck_iter<N>.txt, audit_iter<N>.json) into
+WORKDIR. When the deterministic review gate returns `ship`, promote the selected
+iteration and write the complete final artifact bundle required by SKILL.md.
 
 Render every iter PNG at dpi=300.
 

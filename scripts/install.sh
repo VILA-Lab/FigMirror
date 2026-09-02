@@ -16,7 +16,8 @@
 # Env overrides:
 #   INSTALL_REF     Pin to a branch / tag (default: main)
 #   INSTALL_REPO    owner/repo (default: VILA-Lab/FigMirror)
-#   CLAUDE_HOME     Override Claude Code config dir (default: ~/.claude)
+#   CLAUDE_CONFIG_DIR  Claude Code config dir (default: ~/.claude)
+#   CLAUDE_HOME        Compatibility alias for CLAUDE_CONFIG_DIR
 #   CODEX_HOME      Override Codex config dir (default: ~/.codex)
 #
 # Requires: curl, tar, bash. No Python, no git clone.
@@ -25,7 +26,15 @@ set -euo pipefail
 
 REPO="${INSTALL_REPO:-VILA-Lab/FigMirror}"
 REF="${INSTALL_REF:-main}"
-CLAUDE_TARGET="${CLAUDE_HOME:-$HOME/.claude}"
+# Claude Code reads CLAUDE_CONFIG_DIR; CLAUDE_HOME is kept as a compatibility
+# alias. Installing into a directory Claude does not load is silent - the skill
+# and agents simply never resolve - so prefer the variable the harness uses.
+CLAUDE_TARGET="${CLAUDE_CONFIG_DIR:-${CLAUDE_HOME:-$HOME/.claude}}"
+
+# Single source of truth: both the tarball check and the install step iterate
+# this. They drifted apart once already, which made --claude abort on a cp of a
+# file that no longer exists.
+CLAUDE_AGENTS=(figmirror-drawer figmirror-reviewer)
 CODEX_TARGET="${CODEX_HOME:-$HOME/.codex}"
 
 # --- Parse args ---
@@ -51,7 +60,8 @@ Explicit selection:
 Env vars:
   INSTALL_REF=<ref>           Branch or tag (default: main)
   INSTALL_REPO=<owner/repo>   Source repo
-  CLAUDE_HOME=<path>          Claude Code config dir (default: ~/.claude)
+  CLAUDE_CONFIG_DIR=<path>    Claude Code config dir (default: ~/.claude)
+  CLAUDE_HOME=<path>          Compatibility alias for CLAUDE_CONFIG_DIR
   CODEX_HOME=<path>           Codex config dir (default: ~/.codex)
 USAGE
 }
@@ -185,10 +195,16 @@ validate_three_d_layout() {
 }
 
 if [[ "${INSTALL_CLAUDE:-}" == 1 ]]; then
-  require_file ".claude/agents/figure-preprocessor.md"
-  require_file ".claude/agents/figure-illustrator.md"
-  require_file ".claude/agents/figure-critic.md"
+  for a in "${CLAUDE_AGENTS[@]}"; do
+    require_file ".claude/agents/$a.md"
+  done
   require_file ".claude/skills/figmirror/SKILL.md"
+  require_file ".claude/skills/figmirror/MANIFEST.md"
+  require_file ".claude/skills/figmirror/references/orchestrator-claude.md"
+  require_file ".claude/skills/figmirror/references/orchestrator-codex.md"
+  require_file ".claude/skills/figmirror/references/drawer.md"
+  require_file ".claude/skills/figmirror/references/reviewer.md"
+  require_file ".claude/skills/figmirror/references/preprocessor.md"
   require_file ".claude/skills/figmirror/references/aesthetic-library.md"
   require_file ".claude/skills/figmirror/references/three-d-prompting.md"
   require_file ".claude/skills/figmirror/references/three-d/core.md"
@@ -205,7 +221,8 @@ if [[ "${INSTALL_CLAUDE:-}" == 1 ]]; then
   require_file ".claude/skills/figmirror/references/three-d/marks-and-panels.md"
   require_file ".claude/skills/figmirror/references/three-d/reviewer-scorecard.md"
   require_file ".claude/skills/figmirror/references/three-d/repair-feedback.md"
-  require_file ".claude/skills/figmirror/references/iter-loop-spec.md"
+  require_file ".claude/skills/figmirror/scripts/figannot.py"
+  require_file ".claude/skills/figmirror/scripts/fit_images.py"
   require_file ".claude/skills/figmirror/scripts/score_3d_candidates.py"
   validate_three_d_layout ".claude/skills/figmirror"
 fi
@@ -272,15 +289,21 @@ install_dir() {
 if [[ "${INSTALL_CLAUDE:-}" == 1 ]]; then
   echo "[install] Claude Code → $CLAUDE_TARGET/"
   mkdir -p "$CLAUDE_TARGET/agents" "$CLAUDE_TARGET/skills"
-  install_file "$TMPDIR/.claude/agents/figure-preprocessor.md" \
-               "$CLAUDE_TARGET/agents/figure-preprocessor.md"
-  install_file "$TMPDIR/.claude/agents/figure-illustrator.md" \
-               "$CLAUDE_TARGET/agents/figure-illustrator.md"
-  install_file "$TMPDIR/.claude/agents/figure-critic.md" \
-               "$CLAUDE_TARGET/agents/figure-critic.md"
+  for a in "${CLAUDE_AGENTS[@]}"; do
+    install_file "$TMPDIR/.claude/agents/$a.md" "$CLAUDE_TARGET/agents/$a.md"
+  done
   install_dir  "$TMPDIR/.claude/skills/figmirror" \
                "$CLAUDE_TARGET/skills/figmirror"
-  echo "  agents: figure-preprocessor, figure-illustrator, figure-critic"
+  # The loop dispatches these by exact name and treats an unknown
+  # subagent_type as a fatal fault, so a silent miss here would surface as a
+  # dead run rather than a failed install.
+  for a in "${CLAUDE_AGENTS[@]}"; do
+    [[ -f "$CLAUDE_TARGET/agents/$a.md" ]] || {
+      echo "[install] ERROR: $CLAUDE_TARGET/agents/$a.md missing after install" >&2
+      exit 1
+    }
+  done
+  echo "  agents: ${CLAUDE_AGENTS[*]}"
   echo "  skill:  figmirror"
 fi
 

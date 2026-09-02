@@ -15,11 +15,13 @@
   <a href="#web-ui"><img alt="Web UI" src="https://img.shields.io/badge/Web%20UI-local%20app-2563eb?style=flat&logo=googlechrome&logoColor=white"></a>
   <a href="#codex-skill"><img alt="Codex skill" src="docs/assets/badges/codex.svg"></a>
   <a href="#claude-code-skill"><img alt="Claude Code skill" src="https://img.shields.io/badge/Claude%20Code-skill-d97706?style=flat&logo=anthropic&logoColor=white"></a>
+  <a href="https://arxiv.org/abs/2608.28814"><img alt="arXiv paper" src="https://img.shields.io/badge/arXiv-2608.28814-b31b1b?style=flat&logo=arxiv&logoColor=white"></a>
   <a href="https://huggingface.co/spaces/zcahjl3/figcopy-taxonomy-gallery"><img alt="FigMirror gallery" src="https://img.shields.io/badge/Gallery-139%20figures-f59e0b?style=flat&logo=huggingface&logoColor=white"></a>
   <a href="docs/contributing.md"><img alt="Contributions welcome" src="https://img.shields.io/badge/Contributions-welcome-22c55e?style=flat&logo=github&logoColor=white"></a>
 </p>
 
 <p align="center">
+  <a href="#paper-results">论文与结果</a> |
   <a href="#showcase">展示</a> |
   <a href="#quick-start">快速开始</a> |
   <a href="#how-it-works">工作原理</a> |
@@ -36,6 +38,46 @@
   <video src="https://github.com/user-attachments/assets/0656009c-77c7-41e5-8423-07c3411aef13" width="900" controls
   muted playsinline></video>
 </p>
+
+<h2 id="paper-results">📝 论文与结果</h2>
+
+我们的 [arXiv 预印本](https://arxiv.org/abs/2608.28814)
+[*FigMirror: Ground It, Code It, Plot It*](https://arxiv.org/pdf/2608.28814)
+已于 2026 年 8 月 28 日发布。论文提出 PlotTwin-Bench，用于参考图条件下的
+科学图表风格迁移。
+
+论文报告的主实验评测包含 150 个样本：全部 50 个手工整理参考图，以及从
+augmented source 随机抽取的 100 个参考图。FigMirror 在两组上的综合得分分别为
+**72.7** 和 **76.4**，均为最高分；两组分开汇报，所有方法均使用 GPT-5.5。
+
+<p align="center">
+  <img src="docs/assets/evaluation/main-results.svg" alt="PlotTwin-Bench 主实验结果：FigMirror 在 hand-curated 和 augmented 两组上的综合得分均为最高" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="docs/assets/evaluation/qualitative-comparison.png" alt="FigMirror、Plot2Code、METAL、ChartGalaxy 和 ChartIR 在两张参考图上的定性比较" width="100%"/>
+</p>
+
+<p align="center">
+  <sub>每组定性比较中，FigMirror 和四个 baseline 使用相同的参考图与目标数据。</sub>
+</p>
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
+@misc{zhao2026figmirrorgrounditcode,
+      title={FigMirror: Ground It, Code It, Plot It},
+      author={Xiaohan Zhao and Jiacheng Liu and Yaxin Luo and Zhiqiang Shen},
+      year={2026},
+      eprint={2608.28814},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2608.28814},
+}
+```
+
+</details>
 
 <h2 id="showcase"><img src="docs/assets/icons/showcase.svg" alt="" width="22" height="22" align="absmiddle"> 展示</h2>
 
@@ -94,7 +136,13 @@ bash scripts/install.sh
 uv run python scripts/figcopy_serve.py --workspace .artifacts/figmirror-workspace --backend codex
 ```
 
+把 `--backend codex` 换成 `--backend claude`，即可通过 Claude Code 运行同一个 Web UI。
+
 打开 `http://127.0.0.1:8765/`。
+
+安装器会自动识别 Claude Code 和 Codex。两种 harness 都会安装
+`figmirror` skill，以及当前 role-separated 算法使用的
+`figmirror-drawer` 和 `figmirror-reviewer` custom agents。
 
 <a id="codex-skill"></a>
 <a id="claude-code-skill"></a>
@@ -102,6 +150,10 @@ uv run python scripts/figcopy_serve.py --workspace .artifacts/figmirror-workspac
 <h3 id="skill-only"><img src="docs/assets/icons/skill.svg" alt="" width="18" height="18" align="absmiddle"> 只安装 Skill</h3>
 
 如果你只想在 agent 里使用 FigMirror，不需要 Web UI，用这个方式。
+skill 内的 Python helpers 通过 `uv` 运行；如果尚未安装，先执行
+`python3 -m pip install uv`。
+在共享机器或 root 分区较小的机器上，首次运行前先执行 `df -h`，并把
+`UV_CACHE_DIR` 指向最大非 root 可写文件系统中的用户目录。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash
@@ -123,7 +175,7 @@ Use FigMirror to mirror this figure's style with my data.
 
 > FigMirror 示意图。左侧是核心 agent 循环；右侧是 Grounded Measurement。
 
-FigMirror 使用 agentic Drawer-Reviewer 循环。Drawer 先画出候选图，并通过 ***Grounded Measurement*** 做自检；Reviewer 再把候选图和参考图对比，输出视觉审查、修改清单和需要保留的部分。每一轮保留下来的正确部分会累积成 anchor，减少后续迭代中的风格漂移。Aesthetic Lib 在 agent 判断不一致或 Drawer 信心不足时，提供论文图常见视觉规则和 fallback 原则。
+FigMirror 使用 agentic Drawer-Reviewer 循环。在 Codex 和 Claude Code 中，顶层 Orchestrator 都会把绘图交给 `figmirror-drawer`，把视觉审查交给 `figmirror-reviewer`。Reviewer 对比候选图和参考图，输出带 bounding boxes 的结构化反馈；Orchestrator 再把反馈整理成下一轮 Drawer 使用的标注图和修改说明。两种 harness 共用同一套 decision state machine 和 hard iteration cap，区别只在 subagent transport。
 
 对于 3D 图，FigMirror 会加入 geometry-aware prompting，覆盖 camera、scale、surface、lighting 和 repair checks，帮助循环保留参考图的 3D 构图，同时仍然产出可编辑的 matplotlib 代码。
 
@@ -162,5 +214,5 @@ FigMirror 使用 agentic Drawer-Reviewer 循环。Drawer 先画出候选图，�
 - [x] 添加本地 Web UI，支持上传、浏览迭代和继续 refinement。
 - [x] 发布 139 张图的 gallery，让用户不需要自己到处找参考图。
 - [ ] 定义 prompt-contribution benchmark verifier，用固定 reference/data cases 比较 prompt 改动。
-- [ ] 整理 FigMirror benchmark set，包含参考图、输入数据、生成结果和 human preference labels。
-- [ ] 发布 benchmarking paper，包含 verifier protocol、dataset、baselines 和 prompt-contribution findings。
+- [ ] 发布可复现的 PlotTwin-Bench 评测包，包含参考图、目标数据、生成结果和 evaluation metadata。
+- [x] 发布包含 scorer protocol、benchmark design、baselines 和 analysis 的 arXiv 论文。

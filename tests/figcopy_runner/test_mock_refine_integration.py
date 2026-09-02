@@ -12,6 +12,7 @@ Stage B/C can plug real subprocesses into the same plumbing.
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -155,3 +156,16 @@ def test_mock_refine_rejects_empty_baseline_iters(tmp_path):
     runner = MockRunner()
     with pytest.raises(ValueError):
         runner.refine(tmp_path, baseline_iters=[])
+
+
+def test_mock_auto_mode_still_respects_hard_iteration_cap(tmp_path):
+    runner = MockRunner(sleep_min=0, sleep_max=0)
+    runner.start(tmp_path, max_iters=1, auto=True)
+
+    deadline = time.monotonic() + 2
+    while runner.status(tmp_path)["state"] == "running":
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    assert (tmp_path / "img_iter0.png").is_file()
+    assert not (tmp_path / "img_iter1.png").exists()
