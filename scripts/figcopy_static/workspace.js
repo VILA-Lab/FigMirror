@@ -627,29 +627,6 @@ function setupAsyncRunForm() {
 }
 
 
-/* ─────────── max_iters ↔ auto mutual-exclusion ───────────
- *
- * When the `auto until shipped` checkbox is on, the loop ignores
- * `max_iters` (the runner keeps iterating until the reviewer ships).
- * The two controls are semantically exclusive, so the UI should make
- * that visible — grey out + disable the max_iters input when auto is
- * checked, restore it when unchecked. CSS in style.css handles the
- * visual (`:disabled` rule on `.iters-row input[type=number]`); this
- * handler just flips the attribute on change.
- *
- * Defensive: re-apply on page load too, in case the browser restored
- * a previously-checked state on back-navigation.
- */
-function setupAutoVsMaxItersExclusion() {
-  const auto = document.getElementById('run-auto-cb');
-  const maxIters = document.getElementById('run-max-iters');
-  if (!auto || !maxIters) return;
-  const sync = () => { maxIters.disabled = auto.checked; };
-  auto.addEventListener('change', sync);
-  sync();
-}
-
-
 /* ─────────── backend dropdown → footnote ───────────
  *
  * The footnote under the Run button describes whatever backend is
@@ -801,7 +778,6 @@ function setupRunListDelete() {
 
 document.querySelectorAll('.dropzone').forEach(setupDropzone);
 setupAsyncRunForm();
-setupAutoVsMaxItersExclusion();
 setupBackendNote();
 setupRunListDelete();
 setupRunsPanelHeightSync();

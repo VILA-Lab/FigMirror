@@ -47,7 +47,9 @@ composition/occupancy 12%, style 10%, color 8%, text/export 10%.
 
 Strict pass requires `overall >= 85`, no dimension below 75, topology,
 footprint, camera/aspect, and composition/occupancy at least 82, and no active
-floor. Otherwise `strict_pass=false`.
+floor. Otherwise `strict_pass=false`. The Orchestrator passes `--strict-3d` to
+`figannot.py review-decision`, which rejects a missing scorecard or a shipping
+verdict below these thresholds.
 
 ## Acceptance
 

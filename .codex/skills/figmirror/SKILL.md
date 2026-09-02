@@ -41,18 +41,21 @@ an ordinary 2D task into 3D.
 - **Python runner** owns UI lifecycle, cancellation, Stage-0 bootstrap, optional
   data-gen, and launching the main Codex process.
 - **The top-level Codex process is Orchestrator only.** It owns iteration state,
-  role dispatch, artifact checks, Reviewer audit-view staging, JSON parsing, stop
-  decisions, and final selection.
+  role dispatch, artifact checks, Reviewer audit-view staging, deterministic
+  review-gate invocation, stop decisions, and final selection.
 - **Drawer** runs as the named `figmirror-drawer` custom subagent through
   `spawn_agent` with `fork_context=false`. It writes each iteration's matplotlib
   script, render, notes, and floor self-check in the staged workdir.
 - **Reviewer** runs as the named `figmirror-reviewer` custom subagent through
   `spawn_agent` with `fork_context=false`. It sees only the staged audit view:
   the far-view composite, full-resolution reference/draft near views, the
-  Reviewer prompt, the aesthetic library, and bounded history. It returns strict
-  JSON including `boxes`; the Orchestrator writes that JSON to
-  `audit_iter<N>.json` and deterministically renders `annotated.png` plus
-  `notes.md` for the next Drawer.
+  Reviewer prompt, the aesthetic library, fixed diagnostics, and optional fixed
+  3D audit material. It returns strict
+  JSON including `boxes`; `figannot.py review-decision` validates and records the
+  result before any Drawer or finalization decision. The Orchestrator sends the task text and visual
+  bundle together in one structured `items` payload. The Reviewer must use
+  those attached pixels directly: Do not call `view_image` or reopen image
+  paths.
 - **3D flow** uses the standard Orchestrator plus named Drawer/Reviewer
   subagents, and optional candidate-scoring path for strict reproduction.
 
@@ -83,23 +86,36 @@ an ordinary 2D task into 3D.
    Always stage `scripts/figannot.py`; it is the deterministic operator for
    building audit composites and drawing Reviewer boxes.
 5. In Codex, the top-level agent follows `references/orchestrator-codex.md` and
-   spawns `figmirror-drawer` for each iter. The Drawer writes
+   spawns `figmirror-drawer` for each iter. Every Drawer prompt includes the
+   exact trace line `Iter: <N>` with the current non-negative decimal iteration.
+   The Drawer writes
    `figure_iter<N>.py`, `img_iter<N>.png`, `notes_iter<N>.md`, and
    `floor_selfcheck_iter<N>.txt`; the Orchestrator verifies those files before
    any Reviewer handoff.
 6. Stage `audit_view_<N>`, run `scripts/figannot.py compose` to create
    `composite.png` and `review_prompt.txt`, and spawn `figmirror-reviewer` as
-   described in `references/orchestrator-codex.md`. The Reviewer sees the
-   composite far view, full-resolution reference/draft near views, aesthetic
-   library, optional 3D insert, bounded anchors/changed lists, and prior audit
-   JSON, then returns strict JSON for the Orchestrator to persist.
-7. Run `scripts/figannot.py draw` so `audit_view_<N>/annotated.png` and
-   `audit_view_<N>/notes.md` become the next Drawer invocation's explicit
-   stateless visual history.
-8. Stop when the Reviewer returns a passing quality floor and a shipping verdict.
-   If the caller supplied `max_iters`, select the best floor-passing close iteration
-   when that limit is reached. If the caller enabled auto-until-shipped, keep
-   iterating until `ship` or a real blocker.
+   described in `references/orchestrator-codex.md`. Attach `composite.png`,
+   `reference_clean.png`, and `draft_fullres.png` exactly once as structured
+   local-image items; attach the optional strict-3D accepted control once when
+   present. The Reviewer sees only those images plus the aesthetic library,
+   fixed diagnostics, and optional 3D insert, then returns strict JSON without
+   reopening image paths or reading review/Drawer history.
+7. Run `scripts/figannot.py review-decision` after every Reviewer result. A
+   clean result before the run reaches `min_reviews` total valid Reviewer calls
+   starts another Reviewer on the same immutable draft with no Drawer in between.
+   Actionable feedback permits `scripts/figannot.py draw --max-iters <max_iters>`
+   and another Drawer when below the hard `max_iters` cap. The helper must
+   succeed before spawning that Drawer. A missing, malformed, empty, or inconsistent
+   Reviewer result returns `retry_reviewer`: it does not count, never triggers
+   Drawer, and starts one fresh Reviewer on the same immutable draft. A second
+   consecutive invalid result fails closed. Pass both `--min-reviews` and
+   `--max-iters` to every `review-decision` invocation, plus `--strict-3d` when
+   the router selected `three-d/strict-reproduction.md`.
+8. Stop when the deterministic gate returns `ship`: the quality floor passed,
+   the verdict is clean, and at least `min_reviews` valid Reviewer calls have
+   completed across the run. Default `max_iters=5`; it is always a hard Drawer
+   cap. If the gate returns `stop_at_cap`, do not draw again: select under the
+   existing hard-cap policy and finalize an existing iteration.
 9. Write final `figure.py`, `figure.png`, `figure.pdf`, `output.png`,
    `floor_selfcheck_final.txt`, `selection.md`, `process.md`, and `status.json`.
    `output.png` is the evaluator-facing PNG and may be identical to
@@ -131,17 +147,19 @@ an ordinary 2D task into 3D.
   img_iter0.png
   notes_iter0.md
   floor_selfcheck_iter0.txt
+  review_attempts/
+    attempt_000.json
+    attempt_001.json
   audit_view_0/
     reference_clean.png
-    img_iter0.png
+    draft_fullres.png
     composite.png
     composite_meta.json
     review_prompt.txt
     aesthetic-library.md
-    anchors.md
-    changed.md
     three-d-prompting.md  # router, only for 3D runs
     three-d/              # mode files and routed 3D modules, only for 3D runs
+  review_feedback_0/
     review.json
     annotated.png
     notes.md

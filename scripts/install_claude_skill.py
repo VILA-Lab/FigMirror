@@ -3,13 +3,12 @@
 into the user's Claude Code config directory.
 
 This installs:
-- 3 first-class subagents to ~/.claude/agents/:
-    figure-preprocessor.md (Stage-0 reference crop role)
-    figure-illustrator.md  (Drawer role)
-    figure-critic.md       (Reviewer role)
+- 2 first-class subagents to the Claude Code config directory:
+    figmirror-drawer.md    (Drawer role)
+    figmirror-reviewer.md  (Reviewer role)
 - 1 skill to ~/.claude/skills/figmirror/:
-    SKILL.md, references/aesthetic-library.md, references/three-d-prompting.md,
-    references/three-d/*.md, references/iter-loop-spec.md
+    SKILL.md, the Claude orchestrator, Drawer/Reviewer/Stage-0 prompts,
+    deterministic helpers, and the gated 3D modules.
 
 The orchestrator role is NOT a separate subagent — it lives in the skill's
 SKILL.md and is executed by the caller (the agent that loads the skill).
@@ -19,11 +18,12 @@ issue #4182 + the Claude Code custom-subagents docs which state "If your
 workflow requires nested delegation, use Skills or chain subagents from
 the main conversation").
 
-After install, the skill is auto-discovered by Claude Code and the three
-subagents are invocable via `subagent_type: figure-preprocessor` /
-`figure-illustrator` / `figure-critic`. The user triggers the skill by asking to "copy this
-figure's style" or similar phrasing while attaching a reference image
-+ their data.
+After install, the skill is auto-discovered by Claude Code and the two
+iteration roles are invocable via `subagent_type: figmirror-drawer` and
+`figmirror-reviewer`. Stage 0 is a bounded general-purpose task launched by the
+top-level Orchestrator from the bundled preprocessor prompt. The user triggers
+the skill by asking to copy a figure's style while attaching a reference image
+and their data.
 
 Note: this script is a user-built convenience wrapping `cp -r` with
 frontmatter validation. The official user-level install paths per the
@@ -44,7 +44,7 @@ from pathlib import Path
 
 
 SKILL_NAME = "figmirror"
-AGENT_NAMES = ("figure-preprocessor", "figure-illustrator", "figure-critic")
+AGENT_NAMES = ("figmirror-drawer", "figmirror-reviewer")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_AGENTS_DIR = REPO_ROOT / ".claude" / "agents"
@@ -53,6 +53,12 @@ SOURCE_SKILL_DIR = REPO_ROOT / ".claude" / "skills" / SKILL_NAME
 REQUIRED_AGENT_FILES = tuple(f"{name}.md" for name in AGENT_NAMES)
 REQUIRED_SKILL_FILES = (
     "SKILL.md",
+    "MANIFEST.md",
+    "references/orchestrator-claude.md",
+    "references/orchestrator-codex.md",
+    "references/preprocessor.md",
+    "references/drawer.md",
+    "references/reviewer.md",
     "references/aesthetic-library.md",
     "references/three-d-prompting.md",
     "references/three-d/core.md",
@@ -69,7 +75,8 @@ REQUIRED_SKILL_FILES = (
     "references/three-d/marks-and-panels.md",
     "references/three-d/reviewer-scorecard.md",
     "references/three-d/repair-feedback.md",
-    "references/iter-loop-spec.md",
+    "scripts/figannot.py",
+    "scripts/fit_images.py",
     "scripts/score_3d_candidates.py",
 )
 
@@ -124,7 +131,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--target",
         type=Path,
-        help="Claude Code config root. Defaults to $CLAUDE_HOME or ~/.claude.",
+        help=(
+            "Claude Code config root. Defaults to $CLAUDE_CONFIG_DIR, then "
+            "$CLAUDE_HOME, then ~/.claude."
+        ),
     )
     parser.add_argument(
         "--force",
@@ -145,9 +155,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def default_target_root() -> Path:
-    claude_home = os.environ.get("CLAUDE_HOME")
-    if claude_home:
-        return Path(claude_home).expanduser()
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or os.environ.get(
+        "CLAUDE_HOME"
+    )
+    if config_dir:
+        return Path(config_dir).expanduser()
     return Path.home() / ".claude"
 
 
@@ -426,8 +438,8 @@ def main() -> int:
         return 0
 
     # Preflight: collect all conflicts before mutating anything. Without
-    # this, install_agent could land figure-illustrator.md and then fail
-    # on figure-critic.md / skill dir, leaving a partial install.
+    # this, install_agent could land one role and then fail on the other role or
+    # skill dir, leaving a partial install.
     if not args.force:
         conflicts: list[Path] = []
         for name in AGENT_NAMES:

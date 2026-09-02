@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -64,12 +65,14 @@ from .interface import (
     compute_set_id,
     ensure_reference_raw,
     is_data_placeholder,
+    iteration_cap_failure_reason,
     mark_refine_in_flight,
     next_refine_index,
     read_sessions,
     read_status_sidecar,
     reserve_refine_index,
     reviewer_protocol_failure_reason,
+    terminal_review_decision,
     write_sessions,
 )
 from .refine_completion import (
@@ -107,6 +110,7 @@ def _uv_env() -> dict[str, str]:
     # can export UV_CACHE_DIR themselves; setdefault preserves it.
     # `.artifacts/` is gitignored.
     env.setdefault("UV_CACHE_DIR", str(_REPO_ROOT / ".artifacts" / "uv-cache"))
+    env["FIGMIRROR_PYTHON_CMD"] = shlex.join(_uv_cmd("python"))
     return env
 
 
@@ -170,7 +174,7 @@ class CodexRunner:
     # ───── public Runner Protocol ─────────────────────────────────────
 
     def start(self, workdir: Path, *, prompt: str = "",
-              max_iters: int = 6, auto: bool = False) -> str:
+              max_iters: int = 5, auto: bool = False) -> str:
         """Kick off a Stage-1 run.
 
         Returns immediately. The actual codex subprocess is launched
@@ -1232,28 +1236,46 @@ class CodexRunner:
                 final = "cancelled"
             else:
                 final = "failed"
-            # Auto-finalize fallback: codex CLI can exit non-zero mid-loop
-            # (e.g. turn budget exhausted) even when the agent produced
-            # high-quality iters on disk. If the agent didn't reach a
-            # ship verdict but we have at least one floor-passing iter,
-            # promote the best one to figure.png and treat as shipped.
-            # The orchestrator-codex.md flow says exactly this at the
-            # hard cap; we just do it for the runner-detected early-exit
-            # case too, so the user doesn't see a red "failed" pill
-            # over a run that's actually usable as Stage-2 baselines.
+            # Terminal-action fallback: the deterministic gate may commit
+            # `ship` or `stop_at_cap` immediately before the model process exits
+            # without copying figure.png. Only that ledger-backed state may be
+            # promoted here; provisional or invalid reviews remain failed.
             ship_path = workdir / "figure.png"
             disk_iters = sorted(
                 n
                 for p in workdir.glob("img_iter*.png")
                 if (n := _parse_iter_n_from_path(p.name)) is not None
             )
+            cap_failure = iteration_cap_failure_reason(disk_iters, max_iters)
+            terminal_review = terminal_review_decision(workdir)
+            failure_reason = protocol_failure or cap_failure
+            cap_choice = None
             if (
-                not protocol_failure
-                and final != "shipped"
+                failure_reason is None
+                and terminal_review is not None
+                and terminal_review["action"] == "stop_at_cap"
+            ):
+                cap_choice = _pick_finalize_iter(workdir, disk_iters)
+                if cap_choice is None:
+                    failure_reason = (
+                        "hard cap reached without a floor-passing close candidate"
+                    )
+            if (
+                failure_reason is None
+                and final != "cancelled"
+                and terminal_review is None
+            ):
+                failure_reason = "orchestrator exited before a terminal review decision"
+            if (
+                not failure_reason
                 and not ship_path.exists()
                 and disk_iters
+                and terminal_review is not None
             ):
-                chosen = _pick_finalize_iter(workdir, disk_iters)
+                if terminal_review["action"] == "ship":
+                    chosen = int(terminal_review["iter"])
+                else:
+                    chosen = int(cap_choice)
                 src = workdir / f"img_iter{chosen}.png"
                 try:
                     data = src.read_bytes()
@@ -1266,14 +1288,12 @@ class CodexRunner:
                         sel_tmp.write_text(
                             f"# Selection notes\n\n"
                             f"Selected: **iter {chosen}** "
-                            f"(runner finalize after agent exited "
+                            f"(runner finalize after terminal "
+                            f"{terminal_review['action']} decision; agent exited "
                             f"early; exit_code={exit_code}).\n\n"
-                            f"The Drawer/Reviewer loop produced "
-                            f"{len(disk_iters)} iterations before "
-                            f"codex exited without emitting a final "
-                            f"ship verdict. The latest floor-passing "
-                            f"iter ({chosen}) was selected as the "
-                            f"shipped baseline.\n\n"
+                            f"The deterministic review ledger authorized "
+                            f"iter {chosen}; Codex exited before completing "
+                            f"the final artifact copy.\n\n"
                             f"_Auto-generated by CodexRunner._\n",
                             encoding="utf-8",
                         )
@@ -1288,7 +1308,7 @@ class CodexRunner:
                         file=__import__('sys').stderr,
                     )
 
-            if protocol_failure and final != "cancelled":
+            if failure_reason and final != "cancelled":
                 final = "failed"
 
             with self._iter_state_lock:
@@ -1296,17 +1316,17 @@ class CodexRunner:
                     self._iter_state[workdir]["state"] = final
             # Preserve current_iter so the UI surfaces the last iter
             # the agent produced.
-            last_iter = max(seen_iters) if seen_iters else None
+            last_iter = disk_iters[-1] if disk_iters else None
             _write_status(
                 workdir,
                 state=final,
                 current_iter=last_iter,
-                reason=protocol_failure,
+                reason=failure_reason,
             )
             bus.publish(workdir, slot, events.TurnEndEvent(data={
                 "status": "completed" if final == "shipped" else final,
                 "exit_code": exit_code,
-                **({"reason": protocol_failure} if protocol_failure else {}),
+                **({"reason": failure_reason} if failure_reason else {}),
             }))
 
     def _reader_refine(self, workdir: Path, slot: str, set_id: str,
@@ -1490,12 +1510,12 @@ def _parse_iter_n_from_path(path: str) -> Optional[int]:
         return None
 
 
-def _pick_finalize_iter(workdir: Path, disk_iters: list[int]) -> int:
-    """Pick the best iter to promote to figure.png on early-exit.
+def _pick_finalize_iter(workdir: Path, disk_iters: list[int]) -> Optional[int]:
+    """Pick the latest floor-passing `close` draft at the hard cap.
 
-    Strategy: prefer the LATEST iter whose audit_iter<N>.json reports
-    quality_floor.passed=true. If no audits exist, just pick the
-    latest iter on disk.
+    A floor-failing or `off` draft is not an acceptable final artifact. Return
+    ``None`` when the cap was reached without a candidate the public runner may
+    safely promote.
     """
     import json
     for n in reversed(disk_iters):
@@ -1504,11 +1524,14 @@ def _pick_finalize_iter(workdir: Path, disk_iters: list[int]) -> int:
             continue
         try:
             d = json.loads(ap.read_text())
-            if d.get("quality_floor", {}).get("passed") is True:
+            if (
+                d.get("quality_floor", {}).get("passed") is True
+                and d.get("fidelity", {}).get("verdict") == "close"
+            ):
                 return n
         except Exception:
             continue
-    return disk_iters[-1]
+    return None
 
 
 def _next_refine_index(workdir: Path) -> int:
@@ -1558,16 +1581,14 @@ def _format_loop_policy(*, max_iters: int, auto: bool) -> str:
     if auto:
         return (
             "Loop policy for this run:\n"
-            "- Auto-until-shipped is enabled. Ignore the default iteration cap "
-            "and keep running Drawer/Reviewer iterations until the Reviewer "
-            "returns `ship`.\n"
-            "- Continue through `close` and `off` verdicts when there is a "
-            "clear next revision. Stop only for a true blocker, cancellation, "
-            "or a protocol failure you cannot repair."
+            "- Automatic continuation is enabled: follow each deterministic "
+            "review action until `ship` or the hard Drawer cap.\n"
+            f"- Maximum Drawer iterations: {max_iters}. Never create iteration "
+            f"{max_iters} or later."
         )
     return (
         "Loop policy for this run:\n"
-        f"- Maximum iterations: {max_iters}. Iterate N = 0..{max_iters - 1} "
+        f"- Maximum Drawer iterations: {max_iters}. Iterate N = 0..{max_iters - 1} "
         "unless the Reviewer returns `ship` earlier."
     )
 
@@ -1626,17 +1647,15 @@ Do not crop the reference again unless `inputs/reference_clean.png` is missing
 or `inputs/reference_crop_report.md` says the crop failed.
 
 Codex role policy for this run:
-- You are the Orchestrator + Drawer in this top-level Codex process. Own the
-  loop state, drawing, local floor self-check, stop decision, final selection,
-  and Reviewer JSON parsing.
-- Do not spawn native subagents for Drawer or Reviewer in the default path unless
-  the user explicitly asks for a subagent experiment.
-- Do not launch `codex exec`, `codex`, `claude`, or another model process for the
-  Drawer.
-- Keep the Reviewer fresh-context via the `codex exec -i reference -i draft`
-  path described by the FigMirror Codex orchestrator reference.
-- If you add shell wrapper logic around Reviewer calls, capture exit codes in
-  `rc` or `reviewer_rc`; do not assign to zsh's read-only `status` variable.
+- You are the top-level Orchestrator. Follow the named-role dispatch and
+  deterministic review state machine in `references/orchestrator-codex.md`.
+- Dispatch drawing only to `figmirror-drawer` and visual review only to
+  `figmirror-reviewer`; do not substitute generic roles.
+- Do not launch `codex exec`, `codex`, `claude`, or another model process from
+  inside the loop.
+
+The runner has injected `FIGMIRROR_PYTHON_CMD`; use it for every Python command
+as required by the skill.
 
 {loop_policy}
 
@@ -1645,9 +1664,9 @@ Hard artifact limit for this run:
   never observed by the watcher.
 
 Produce iter files (figure_iter<N>.py, img_iter<N>.png, notes_iter<N>.md,
-audit_iter<N>.json) into WORKDIR. When the Reviewer verdict is `ship`,
-promote that iter's image to WORKDIR/figure.png and write a selection.md
-describing the chosen iter.
+floor_selfcheck_iter<N>.txt, audit_iter<N>.json) into WORKDIR. When the
+deterministic review gate returns `ship`, promote the selected iteration and
+write the complete final artifact bundle required by SKILL.md.
 
 Render every iter PNG at dpi=300.
 

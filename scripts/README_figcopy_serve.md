@@ -5,13 +5,11 @@ FigMirror feedback loop end-to-end from a browser. Two modes:
 
 - **Workspace mode** (`--workspace <dir>`) — multi-run dashboard. Submit
   runs through a paste / drag-drop / file-picker form, watch them
-  iterate live, browse the trajectory, refine via chat. Phase 2 ships
-  this as the headline path. `MockRunner` is the default backend so
-  the UI works without any external dependency.
+  iterate live, browse the trajectory, and refine via chat. Choose Codex,
+  Claude Code, or the offline `MockRunner` per run.
 - **Single-run mode** (positional `<workdir>`) — viewer for a single
-  workdir. The skill (or a real backend) writes iter files; this page
-  reloads as artifacts land. Phase 1 path; useful when driving codex
-  manually from another terminal.
+  workdir. The skill writes iter files; this page reloads as artifacts
+  land. Useful when driving FigMirror manually from another terminal.
 
 Runs on Python 3.10+. The server itself is stdlib-only; `MockRunner`
 also uses `Pillow` for Step 2 chat refinement (overlaying the rcParams
@@ -27,7 +25,7 @@ uv sync --group dev   # pulls runtime Pillow plus dev matplotlib/numpy/pytest
 Then run with `uv run`:
 
 ```bash
-uv run python3 scripts/figcopy_serve.py --workspace /tmp/workspace
+uv run python scripts/figcopy_serve.py --workspace /tmp/workspace --backend mock
 ```
 
 The Codex/Claude subprocess runners also launch through
@@ -38,7 +36,9 @@ environment.
 
 ```bash
 mkdir -p /tmp/figmirror_workspace
-python3 scripts/figcopy_serve.py --workspace /tmp/figmirror_workspace
+uv run python scripts/figcopy_serve.py \
+  --workspace /tmp/figmirror_workspace \
+  --backend mock
 ```
 
 Open `http://127.0.0.1:8765/`. The landing page is split:
@@ -46,8 +46,8 @@ Open `http://127.0.0.1:8765/`. The landing page is split:
 - **Left panel · New run.** Drop / paste / pick a reference image and
   optional data file, type a style instruction, set `max_iters`, click
   Run. The form posts to `/api/run`, the server stages a workdir, and
-  the active backend (default: `MockRunner`) starts producing iter files
-  on a 4–8s timer.
+  the selected backend starts producing iter files. `max_iters` is always a
+  hard Drawer cap; auto-continuation stops at `ship` or that cap.
 - **Right panel · Runs.** Live-polled run-bars (every 3s) showing each
   run's status (`running` / `shipped` / `failed` / `idle`), iter count,
   and a thumbnail of the most recent iter image. Click a run to open
@@ -108,9 +108,9 @@ deltas persist per `(run, template_iter)` in `localStorage`.
 
 ### Backends
 
-Phase 2 ships three implementations of the `Runner` Protocol:
+The server ships three implementations of the `Runner` Protocol:
 
-- **`MockRunner`** (default) — synthesizes plausible iter files into
+- **`MockRunner`** — synthesizes plausible iter files into
   the workdir on a timer. One mock serves both real backends because
   the on-disk contract (atomic iter file + `status.json` sidecar
   writes) is identical across them. Pre-staged iter content lives in
@@ -120,33 +120,34 @@ Phase 2 ships three implementations of the `Runner` Protocol:
   template image (annotation card in the bottom-right corner showing
   prev → new arrows) so the visible change reflects what the chat
   said.
-- **`CodexRunner`** — Phase 3 stub for `subprocess.Popen(['codex',
-  'exec', ...])`. Not wired in Phase 2.
-- **`ClaudeRunner`** — Phase 3 stub for the Claude CLI backend. Not
-  wired in Phase 2.
+- **`CodexRunner`** — launches `codex exec` against the installed `figmirror`
+  skill. The top-level process orchestrates the named `figmirror-drawer` and
+  `figmirror-reviewer` roles and uses the deterministic review gate.
+- **`ClaudeRunner`** — launches `claude --print` against the installed Claude
+  Code skill. Its top-level process dispatches the same named roles through
+  synchronous `Task` calls.
 
-The current code defaults to `MockRunner`. Stage G of phase2-webui-
-workpanel will land `--mock` / `--codex` / `--claude` CLI flags + the
-real CLI invocations.
+The server registers Codex and Claude only when both `uv` and the matching CLI
+are available. `--backend` selects the default; each new run can select any
+registered backend from the form.
 
 The two steps spawn the backend differently:
 
 - **Step 1 (the loop)** reuses the existing
-  `.codex/skills/figmirror/` skill — the runner just shells
-  out to `codex exec` (or `claude`) against that skill. No skill
-  changes needed.
+  installed FigMirror skill for the selected harness. The runner performs
+  Stage 0, injects the repository Python command, then launches the top-level
+  Orchestrator. Both real backends use a hard `max_iters` Drawer cap.
 - **Step 2 (chat refinement)** is a **separate** subprocess call with
   its own system prompt **baked into the runner module**. The skill
   is not involved. The system prompt instructs the agent to write
   `refine_NNN.png` + `refine_NNN_delta.json` + `refine_NNN_review.txt`
   into the workdir; the runner reads those back as the response.
 
-So real backends ship without any cross-surface change to
-`.codex/skills/`.
+The real runners read installed skill files without modifying them.
 
 ## Single-run quickstart
 
-For driving the codex skill manually (Phase 1 flow):
+For driving the Codex or Claude Code skill manually:
 
 ```bash
 python3 scripts/figcopy_run.py \
@@ -155,8 +156,8 @@ python3 scripts/figcopy_run.py \
     --workdir /tmp/myrun
 ```
 
-The launcher stages `inputs/` and starts the viewer; you then drive
-codex from another terminal:
+The launcher stages `inputs/` and starts the viewer; you then drive FigMirror
+from another Codex or Claude Code terminal:
 
 ```
 /figmirror  workdir=/tmp/myrun
@@ -204,6 +205,7 @@ single `/<workdir-name>/<file>` static route.
 | `--no-open` | off | skip `webbrowser.open` |
 | `--no-serve` | off | render HTML and exit (single-run only) |
 | `--no-watch` | off | disable live-refresh + lightbox |
+| `--backend {codex,claude,mock}` | `codex` | workspace default backend; unavailable real CLIs fail at startup |
 | `--upload` | off | push self-contained HTML to a HuggingFace Space |
 | `--space user/repo` | `zcahjl3/figcopy-taxonomy-gallery` | HF Space target |
 
@@ -211,11 +213,9 @@ single `/<workdir-name>/<file>` static route.
 
 - Single-run mode only **reads** the workdir while serving (other than
   writing the sibling `figcopy_serve.html` on render).
-- Workspace mode writes only inside the selected workspace, and only
-  through `/api/run` (stage workdir) + `MockRunner` (iter files +
-  `status.json` sidecar) + `/api/refine` (refine_NNN.png).
-- Does not touch `.codex/skills/figmirror/` or its
-  references.
+- Workspace mode writes only inside the selected workspace through `/api/run`,
+  the selected runner, and `/api/refine`.
+- Real runners read the installed Codex or Claude skill and never mutate it.
 - Tolerates partial workdirs — missing artifacts are surfaced as
   `inputs/X missing` notes rather than crashes.
 
@@ -230,7 +230,7 @@ are explicitly out of scope. Phase 2 features that require modern APIs:
 - `navigator.clipboard.writeText` for the Export Code Copy button.
 - `:has()` is *not* used (so older Safari isn't blocked).
 
-## Phase 2 file layout
+## File layout
 
 ```
 scripts/
@@ -239,9 +239,9 @@ scripts/
 ├── figcopy_runner/              # backend-agnostic runners
 │   ├── __init__.py
 │   ├── interface.py             # Runner Protocol
-│   ├── mock.py                  # MockRunner — Phase 2 default
-│   ├── codex.py                 # CodexRunner — Phase 3 stub
-│   └── claude.py                # ClaudeRunner — Phase 3 stub
+│   ├── mock.py                  # MockRunner — offline UI backend
+│   ├── codex.py                 # CodexRunner — Codex skill adapter
+│   └── claude.py                # ClaudeRunner — Claude Code skill adapter
 └── figcopy_static/              # served at /static-ui/*
     ├── __init__.py              # makes it an importable package
     ├── style.css                # all CSS

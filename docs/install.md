@@ -12,14 +12,22 @@ Install FigMirror for me: https://github.com/VILA-Lab/FigMirror
 
 ## Skill Install
 
+The skill's bundled Python helpers use `uv`. Install it first with
+`python3 -m pip install uv` if needed. Web UI runners inject a project-pinned
+Python command; direct skill-only runs use an isolated `uv run --with ...`
+fallback. On shared or small-root machines, run `df -h` first and export
+`UV_CACHE_DIR` to a user-owned directory on the largest non-root writable
+filesystem.
+
 Auto-detect Codex and Claude Code:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash
 ```
 
-For Codex, this installs both the `figmirror` skill and the required custom
-agents: `figmirror-drawer` and `figmirror-reviewer`.
+For both Codex and Claude Code, this installs the `figmirror` skill and the
+required custom agents: `figmirror-drawer` and `figmirror-reviewer`. Stage 0
+reference cleanup is bundled in the skill and runs as a bounded general task.
 
 Choose a target explicitly:
 
@@ -29,7 +37,9 @@ curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/ins
 curl -fsSL https://raw.githubusercontent.com/VILA-Lab/FigMirror/main/scripts/install.sh | bash -s -- --all
 ```
 
-The installed skill id is `figmirror`.
+The installed skill id is `figmirror`. Claude Code honors
+`CLAUDE_CONFIG_DIR`; `CLAUDE_HOME` remains a compatibility alias for the
+installers in this repository.
 
 ## Web UI
 
@@ -58,8 +68,8 @@ Optional: set `UV_CACHE_DIR=.artifacts/uv-cache` before `uv run` if you want uv'
 If you already cloned the repo and want installer validation flags:
 
 ```bash
-python3 scripts/install_codex_skill.py --dry-run
-python3 scripts/install_claude_skill.py --dry-run
+uv run python scripts/install_codex_skill.py --dry-run
+uv run python scripts/install_claude_skill.py --dry-run
 ```
 
 Both local installers support `--dry-run`, `--validate-only`, and `--target`.

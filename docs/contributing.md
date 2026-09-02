@@ -53,14 +53,13 @@ Primary files:
 
 - `.codex/skills/figmirror/`
 - `.claude/skills/figmirror/`
-- `.claude/agents/figure-preprocessor.md`
-- `.claude/agents/figure-illustrator.md`
-- `.claude/agents/figure-critic.md`
+- `.codex/agents/figmirror-{drawer,reviewer}.toml`
+- `.claude/agents/figmirror-{drawer,reviewer}.md`
 
 Development/history bundles may live under `resources/prompts/`, but prompt
 changes intended for runtime should land in the Codex/Claude skill files above.
 
-Prompt changes should keep the L1/L2 grounding contract intact: visual decisions come from the reference image or aesthetic library, and the reviewer preserve list should survive into the next iteration.
+Prompt changes should keep the L1/L2 grounding contract intact: visual decisions come from the reference image or aesthetic library, and the reviewer preserve list should survive into the next iteration. Both harnesses use a hard `max_iters` Drawer cap.
 
 ### Tests
 

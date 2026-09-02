@@ -100,6 +100,7 @@ def test_create_run_accepts_available_backend(tmp_path):
     )
 
     assert config["backend"] == "claude"
+    assert config["max_iters"] == 5
     assert (run_dir / "config.json").is_file()
     assert not (run_dir / "prompts").exists()
     assert not (run_dir / "inputs" / "aesthetic-library.md").exists()
@@ -169,6 +170,18 @@ def test_render_landing_renders_mock_option_when_available(tmp_path):
     )
 
     assert "<option value='mock' selected>MockRunner</option>" in html
+
+
+def test_render_landing_keeps_auto_mode_bounded_by_visible_cap(tmp_path):
+    html = figcopy_serve.render_landing(
+        tmp_path,
+        available_backends={"mock"},
+        default_backend="mock",
+    )
+
+    assert "value='5' min='1' max='20'" in html
+    assert "auto-continue to ship or cap" in html
+    assert "auto until shipped" not in html
 
 
 def test_render_iter_pdf_falls_back_to_live_matplotlib_figure(tmp_path):
