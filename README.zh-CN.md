@@ -51,7 +51,11 @@ augmented source 随机抽取的 100 个参考图。FigMirror 在两组上的综
 **72.7** 和 **76.4**，均为最高分；两组分开汇报，所有方法均使用 GPT-5.5。
 
 <p align="center">
-  <img src="docs/assets/evaluation/main-results.svg" alt="PlotTwin-Bench 主实验结果：FigMirror 在 hand-curated 和 augmented 两组上的综合得分均为最高" width="100%"/>
+  <img src="docs/assets/evaluation/main-results.png" alt="论文表 1：FigMirror 与四个 baseline 在 PlotTwin-Bench 上的代码分、视觉分和综合分" width="100%"/>
+</p>
+
+<p align="center">
+  <sub><b>主实验结果。</b>PlotTwin-Bench 上代码分、视觉分和综合分的对比；FigMirror 在 hand-curated 和 augmented 两组参考图上的综合分均排名第一。</sub>
 </p>
 
 <p align="center">
@@ -59,25 +63,8 @@ augmented source 随机抽取的 100 个参考图。FigMirror 在两组上的综
 </p>
 
 <p align="center">
-  <sub>每组定性比较中，FigMirror 和四个 baseline 使用相同的参考图与目标数据。</sub>
+  <sub><b>定性对比。</b>每组在同一 target data 上依次展示参考图、FigMirror 和四个 baseline；A 组考察密集多面板构图，B 组考察带边缘直方图的 joint hexbin 布局。</sub>
 </p>
-
-<details>
-<summary>BibTeX</summary>
-
-```bibtex
-@misc{zhao2026figmirrorgrounditcode,
-      title={FigMirror: Ground It, Code It, Plot It},
-      author={Xiaohan Zhao and Jiacheng Liu and Yaxin Luo and Zhiqiang Shen},
-      year={2026},
-      eprint={2608.28814},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2608.28814},
-}
-```
-
-</details>
 
 <h2 id="showcase"><img src="docs/assets/icons/showcase.svg" alt="" width="22" height="22" align="absmiddle"> 展示</h2>
 
@@ -216,3 +203,19 @@ FigMirror 使用 agentic Drawer-Reviewer 循环。在 Codex 和 Claude Code 中�
 - [ ] 定义 prompt-contribution benchmark verifier，用固定 reference/data cases 比较 prompt 改动。
 - [ ] 发布可复现的 PlotTwin-Bench 评测包，包含参考图、目标数据、生成结果和 evaluation metadata。
 - [x] 发布包含 scorer protocol、benchmark design、baselines 和 analysis 的 arXiv 论文。
+
+<h2 id="citation">📚 Citation</h2>
+
+如果 FigMirror 对你的工作有帮助，欢迎引用：
+
+```bibtex
+@misc{zhao2026figmirrorgrounditcode,
+      title={FigMirror: Ground It, Code It, Plot It},
+      author={Xiaohan Zhao and Jiacheng Liu and Yaxin Luo and Zhiqiang Shen},
+      year={2026},
+      eprint={2608.28814},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2608.28814},
+}
+```
