@@ -62,7 +62,11 @@ and **76.4** on augmented references. The splits are reported separately, and
 all methods in this comparison use GPT-5.5.
 
 <p align="center">
-  <img src="docs/assets/evaluation/main-results.svg" alt="PlotTwin-Bench main results: FigMirror leads the combined score on hand-curated and augmented references" width="100%"/>
+  <img src="docs/assets/evaluation/main-results.png" alt="Paper Table 1 showing PlotTwin-Bench code, vision, and combined scores for FigMirror and four baselines" width="100%"/>
+</p>
+
+<p align="center">
+  <sub><b>Main results.</b> PlotTwin-Bench comparison by code, vision, and combined scores. FigMirror achieves the highest combined score on both the hand-curated and augmented reference splits.</sub>
 </p>
 
 <p align="center">
@@ -70,25 +74,8 @@ all methods in this comparison use GPT-5.5.
 </p>
 
 <p align="center">
-  <sub>Each qualitative group uses the same reference and target data for FigMirror and all four baselines.</sub>
+  <sub><b>Qualitative comparison.</b> Each group shows the reference, FigMirror, and four baselines on the same target data. Group A tests a dense multi-panel composition; Group B tests a joint hexbin plot with marginal histograms.</sub>
 </p>
-
-<details>
-<summary>BibTeX</summary>
-
-```bibtex
-@misc{zhao2026figmirrorgrounditcode,
-      title={FigMirror: Ground It, Code It, Plot It},
-      author={Xiaohan Zhao and Jiacheng Liu and Yaxin Luo and Zhiqiang Shen},
-      year={2026},
-      eprint={2608.28814},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2608.28814},
-}
-```
-
-</details>
 
 <h2 id="showcase"><img src="docs/assets/icons/showcase.svg" alt="" width="22" height="22" align="absmiddle"> Showcase</h2>
 
@@ -241,3 +228,19 @@ Start with [docs/contributing.md](docs/contributing.md). Good first PRs include 
 - [x] Release the scorer protocol, benchmark design, baselines, and analysis in an arXiv paper.
 - [ ] Release reproducible PlotTwin-Bench artifacts with references, target data, generated outputs, and evaluation metadata.
 - [ ] Harden install and runtime docs for more OpenAI-compatible and local-agent backends.
+
+<h2 id="citation">📚 Citation</h2>
+
+If FigMirror helps your work, please cite:
+
+```bibtex
+@misc{zhao2026figmirrorgrounditcode,
+      title={FigMirror: Ground It, Code It, Plot It},
+      author={Xiaohan Zhao and Jiacheng Liu and Yaxin Luo and Zhiqiang Shen},
+      year={2026},
+      eprint={2608.28814},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2608.28814},
+}
+```
