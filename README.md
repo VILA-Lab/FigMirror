@@ -42,7 +42,7 @@
 - **Jun 17, 2026 — Algorithm update:** refined the Codex path with role-separated Drawer / Reviewer agents, far-near visual review views, reviewer bounding boxes, and annotated feedback passed into the next iteration.
 - **Jul 1, 2026 — Evaluation update:** built an internal hybrid style scorer for repeatable method comparison.
 - **Aug 17, 2026 — Claude Code parity:** ported the production role-separated loop to Claude Code with the same decision state machine and bounded iteration contract.
-- **Aug 28, 2026 — arXiv preprint:** released [*FigMirror: Ground It, Code It, Plot It*](https://arxiv.org/abs/2608.28814), introducing PlotTwin-Bench and the paper's benchmark results.
+- **Aug 28, 2026 — arXiv preprint:** released [*FigMirror: Ground It, Code It, Plot It*](https://arxiv.org/abs/2608.28814), introducing [PlotTwin-Bench](https://huggingface.co/datasets/figmirror/PlotTwin-Bench) and the paper's benchmark results.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/0656009c-77c7-41e5-8423-07c3411aef13" width="900" controls
