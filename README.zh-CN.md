@@ -16,6 +16,7 @@
   <a href="#codex-skill"><img alt="Codex skill" src="docs/assets/badges/codex.svg"></a>
   <a href="#claude-code-skill"><img alt="Claude Code skill" src="https://img.shields.io/badge/Claude%20Code-skill-d97706?style=flat&logo=anthropic&logoColor=white"></a>
   <a href="https://arxiv.org/abs/2608.28814"><img alt="arXiv paper" src="https://img.shields.io/badge/arXiv-2608.28814-b31b1b?style=flat&logo=arxiv&logoColor=white"></a>
+  <a href="https://huggingface.co/datasets/figmirror/PlotTwin-Bench"><img alt="PlotTwin-Bench dataset" src="https://img.shields.io/badge/Dataset-PlotTwin--Bench-ffd21e?style=flat&logo=huggingface&logoColor=black"></a>
   <a href="https://huggingface.co/spaces/zcahjl3/figcopy-taxonomy-gallery"><img alt="FigMirror gallery" src="https://img.shields.io/badge/Gallery-139%20figures-f59e0b?style=flat&logo=huggingface&logoColor=white"></a>
   <a href="docs/contributing.md"><img alt="Contributions welcome" src="https://img.shields.io/badge/Contributions-welcome-22c55e?style=flat&logo=github&logoColor=white"></a>
 </p>
@@ -49,6 +50,10 @@
 论文报告的主实验评测包含 150 个样本：全部 50 个手工整理参考图，以及从
 augmented source 随机抽取的 100 个参考图。FigMirror 在两组上的综合得分分别为
 **72.7** 和 **76.4**，均为最高分；两组分开汇报，所有方法均使用 GPT-5.5。
+
+PlotTwin-Bench 已发布在 Hugging Face：
+[`figmirror/PlotTwin-Bench`](https://huggingface.co/datasets/figmirror/PlotTwin-Bench)。
+默认的 `bench` config 是这 150 个评测任务，`full` 包含全部 399 个参考图。
 
 <p align="center">
   <img src="docs/assets/evaluation/main-results.png" alt="论文表 1：FigMirror 与四个 baseline 在 PlotTwin-Bench 上的代码分、视觉分和综合分" width="100%"/>
